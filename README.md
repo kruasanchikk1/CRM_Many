@@ -4,8 +4,9 @@
 > **Закончил созвон — получил протокол, задачи в Jira и аналитику. Без ручного ввода.**
 
 ---
-Сайт (https://voice2action-site.netlify.app/)
-ТГ-бот (https://t.me/voice2action_bot)
+- ##  [Cайт](https://voice2action-site.netlify.app/)
+
+- ##  [ТГ-бот](https://t.me/voice2action_bot)
 
 ## Навигация
 - [Суть проекта](#суть-проекта-elevator-pitch)
