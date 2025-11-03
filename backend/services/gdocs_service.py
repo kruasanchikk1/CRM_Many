@@ -171,6 +171,26 @@ class GoogleDocsService:
             logger.error(f"Ошибка создания Sheet: {e}")
             raise
 
+    def _authenticate(self):
+        """OAuth через Service Account"""
+        import json
+
+        creds = None
+
+        # Проверка на Service Account
+        if os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"):
+            try:
+                service_account_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
+                from google.oauth2 import service_account
+
+                creds = service_account.Credentials.from_service_account_info(
+                    service_account_info,
+                    scopes=SCOPES
+                )
+                logger.info(f"✅ Service Account подключён: {creds.service_account_email}")
+            except Exception as e:
+                logger.error(f"❌ Ошибка Service Account: {e}")
+                raise
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
