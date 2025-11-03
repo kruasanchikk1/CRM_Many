@@ -16,7 +16,7 @@ app = FastAPI(title="Voice2Action API")
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # В продакшене замени на конкретные домены
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -26,20 +26,41 @@ app.add_middleware(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Инициализация
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-gdocs = GoogleDocsService()
+# Инициализация клиентов С ЗАЩИТОЙ ОТ ОШИБОК
+try:
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    logger.info("✅ OpenAI клиент инициализирован")
+except Exception as e:
+    logger.error(f"❌ Ошибка инициализации OpenAI: {e}")
+    client = None
 
+try:
+    gdocs = GoogleDocsService()
+    logger.info("✅ Google Docs сервис инициализирован")
+except Exception as e:
+    logger.error(f"❌ Ошибка инициализации Google Docs: {e}")
+    gdocs = None
 
 @app.get("/")
 async def root():
     return {"message": "Voice2Action API v1.0", "status": "running"}
 
-
+@app.get("/health")
+async def health_check():
+    """Проверка статуса сервисов"""
+    return {
+        "status": "running",
+        "openai": "connected" if client else "disconnected",
+        "google_docs": "connected" if gdocs else "disconnected"
+    }
 @app.post("/api/process-audio")
 async def process_audio(file: UploadFile = File(...)):
     """Обработка аудио: транскрипция → анализ → Google Docs"""
-
+    # Проверка инициализации сервисов
+    if not client:
+        raise HTTPException(500, "OpenAI client not initialized")
+    if not gdocs:
+        raise HTTPException(500, "Google Docs service not initialized")
     try:
         # 1. Валидация
         valid_types = ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/mp4', 'audio/x-m4a', 'audio/mp3']

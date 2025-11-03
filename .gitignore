@@ -32,3 +32,6 @@ telegram-bot/__pycache__
 
 token.json
 credentials.json
+service-account-key.json
+*.json
+.env
