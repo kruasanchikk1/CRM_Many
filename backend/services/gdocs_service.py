@@ -16,7 +16,7 @@ SCOPES = [
 ]
 
 CREDENTIALS_FILE = 'credentials.json'
-TOKEN_FILE = 'token.json'  # ← ДОБАВЛЕНО
+TOKEN_FILE = 'token.json'
 
 
 class GoogleDocsService:
@@ -42,7 +42,7 @@ class GoogleDocsService:
                     service_account_info,
                     scopes=SCOPES
                 )
-                logger.info("✅ Service Account подключён (Render)")
+                logger.info(f"✅ Service Account подключён: {creds.service_account_email}")
             except Exception as e:
                 logger.error(f"❌ Ошибка Service Account: {e}")
                 raise
@@ -102,6 +102,9 @@ class GoogleDocsService:
             self.sheets_service = build('sheets', 'v4', credentials=creds)
             self.drive_service = build('drive', 'v3', credentials=creds)
             logger.info("✅ Google API подключён")
+            logger.info(f"✅ Docs service: {self.docs_service is not None}")
+            logger.info(f"✅ Sheets service: {self.sheets_service is not None}")
+            logger.info(f"✅ Drive service: {self.drive_service is not None}")
         except Exception as e:
             logger.error(f"❌ Не удалось подключить Google API: {e}")
             raise
@@ -109,6 +112,11 @@ class GoogleDocsService:
     def create_doc(self, title: str, content: str) -> str:
         """Создаёт Google Doc"""
         try:
+            # Проверка инициализации
+            if not self.docs_service:
+                logger.error("❌ Docs service not initialized")
+                raise Exception("Google Docs service not available")
+
             doc = self.docs_service.documents().create(body={'title': title}).execute()
             doc_id = doc['documentId']
 
@@ -137,6 +145,11 @@ class GoogleDocsService:
     def create_sheet(self, title: str, tasks: list) -> str:
         """Создаёт Google Sheet"""
         try:
+            # Проверка инициализации
+            if not self.sheets_service:
+                logger.error("❌ Sheets service not initialized")
+                raise Exception("Google Sheets service not available")
+
             spreadsheet = {
                 'properties': {'title': title},
                 'sheets': [{'properties': {'title': 'Задачи'}}]
@@ -144,12 +157,13 @@ class GoogleDocsService:
             sheet = self.sheets_service.spreadsheets().create(body=spreadsheet).execute()
             sheet_id = sheet['spreadsheetId']
 
-            values = [['Задача', 'Дедлайн', 'Ответственный']]
+            values = [['Задача', 'Дедлайн', 'Ответственный', 'Приоритет']]
             for task in tasks:
                 values.append([
                     task.get('description', ''),
                     task.get('deadline', '—'),
-                    task.get('assignee', '—')
+                    task.get('assignee', '—'),
+                    task.get('priority', '—')
                 ])
 
             self.sheets_service.spreadsheets().values().update(
@@ -171,26 +185,6 @@ class GoogleDocsService:
             logger.error(f"Ошибка создания Sheet: {e}")
             raise
 
-    def _authenticate(self):
-        """OAuth через Service Account"""
-        import json
-
-        creds = None
-
-        # Проверка на Service Account
-        if os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"):
-            try:
-                service_account_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
-                from google.oauth2 import service_account
-
-                creds = service_account.Credentials.from_service_account_info(
-                    service_account_info,
-                    scopes=SCOPES
-                )
-                logger.info(f"✅ Service Account подключён: {creds.service_account_email}")
-            except Exception as e:
-                logger.error(f"❌ Ошибка Service Account: {e}")
-                raise
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -203,7 +197,7 @@ if __name__ == "__main__":
         print(f"Документ: {doc_url}")
 
         sheet_url = service.create_sheet("Тест Задачи", [
-            {"description": "Сделать презентацию", "deadline": "2025-11-05", "assignee": "Антон"}
+            {"description": "Сделать презентацию", "deadline": "2025-11-05", "assignee": "Антон", "priority": "High"}
         ])
         print(f"Таблица: {sheet_url}")
     except Exception as e:
