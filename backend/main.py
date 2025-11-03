@@ -5,6 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from dotenv import load_dotenv
 import json
+import speech_recognition as sr
+from pydub import AudioSegment
+import io
 
 # Импорт сервисов
 from backend.services.gdocs_service import GoogleDocsService
@@ -41,6 +44,48 @@ except Exception as e:
     logger.error(f"❌ Ошибка инициализации Google Docs: {e}")
     gdocs = None
 
+
+def transcribe_audio_local(audio_data: bytes, filename: str) -> str:
+    """Бесплатная транскрипция через Google Speech Recognition"""
+    try:
+        logger.info(f"Starting local transcription for: {filename}")
+
+        # Конвертируем в WAV
+        if filename.endswith('.ogg'):
+            audio = AudioSegment.from_ogg(io.BytesIO(audio_data))
+        elif filename.endswith('.mp3'):
+            audio = AudioSegment.from_mp3(io.BytesIO(audio_data))
+        elif filename.endswith('.wav'):
+            audio = AudioSegment.from_wav(io.BytesIO(audio_data))
+        else:
+            # Пробуем автоматическое определение формата
+            audio = AudioSegment.from_file(io.BytesIO(audio_data))
+
+        # Конвертируем в моно, 16kHz для лучшего распознавания
+        audio = audio.set_channels(1).set_frame_rate(16000)
+
+        wav_data = io.BytesIO()
+        audio.export(wav_data, format='wav')
+        wav_data.seek(0)
+
+        # Транскрипция через Google Speech Recognition
+        recognizer = sr.Recognizer()
+        with sr.AudioFile(wav_data) as source:
+            audio_data = recognizer.record(source)
+            text = recognizer.recognize_google(audio_data, language='ru-RU')
+            logger.info(f"Local transcription successful: {len(text)} chars")
+            return text
+
+    except sr.UnknownValueError:
+        logger.error("Google Speech Recognition could not understand audio")
+        return "Речь не распознана. Пожалуйста, попробуйте другой файл."
+    except sr.RequestError as e:
+        logger.error(f"Google Speech Recognition error: {e}")
+        return f"Ошибка сервиса распознавания: {e}"
+    except Exception as e:
+        logger.error(f"Local transcription failed: {e}")
+        return f"Ошибка обработки аудио: {str(e)}"
+
 @app.get("/")
 async def root():
     return {"message": "Voice2Action API v1.0", "status": "running"}
@@ -53,14 +98,16 @@ async def health_check():
         "openai": "connected" if client else "disconnected",
         "google_docs": "connected" if gdocs else "disconnected"
     }
+
+
 @app.post("/api/process-audio")
 async def process_audio(file: UploadFile = File(...)):
-    """Обработка аудио: транскрипция → анализ → Google Docs"""
+    """Обработка аудио: локальная транскрипция → Google Docs"""
+
     # Проверка инициализации сервисов
-    if not client:
-        raise HTTPException(500, "OpenAI client not initialized")
     if not gdocs:
         raise HTTPException(500, "Google Docs service not initialized")
+
     try:
         # 1. Валидация
         valid_types = ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/mp4', 'audio/x-m4a', 'audio/mp3']
@@ -69,99 +116,28 @@ async def process_audio(file: UploadFile = File(...)):
 
         # 2. Чтение файла
         audio = await file.read()
-        if len(audio) > 25 * 1024 * 1024:  # 25 МБ
-            raise HTTPException(400, "File too large (max 25MB)")
+        if len(audio) > 10 * 1024 * 1024:  # 10 МБ максимум для бесплатной версии
+            raise HTTPException(400, "File too large (max 10MB)")
 
         logger.info(f"Processing file: {file.filename}, size: {len(audio)} bytes")
 
-        # 3. Транскрибация (Whisper)
-        transcript = client.audio.transcriptions.create(
-            model="whisper-1",
-            file=(file.filename, audio, file.content_type or "audio/mpeg")
-        )
+        # 3. Локальная транскрипция (бесплатная)
+        transcript_text = transcribe_audio_local(audio, file.filename)
 
-        logger.info(f"Transcription completed: {len(transcript.text)} chars")
-
-        # 4. Анализ (GPT)
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": """Ты — ассистент для встреч. Создай:
-1. Краткий summary (2-3 предложения)
-2. Список задач в JSON формате:
-
-{
-  "summary": "Краткое описание встречи",
-  "tasks": [
-    {
-      "description": "Описание задачи",
-      "deadline": "YYYY-MM-DD или 'Не указан'",
-      "assignee": "Имя или 'Не указан'",
-      "priority": "High/Medium/Low"
-    }
-  ]
-}
-
-Используй ТОЛЬКО информацию из транскрипта."""
-                },
-                {"role": "user", "content": f"Транскрипт встречи:\n\n{transcript.text}"}
-            ],
-            temperature=0.3
-        )
-
-        analysis_text = response.choices[0].message.content
-        logger.info(f"Analysis completed: {len(analysis_text)} chars")
-
-        # 5. Парсинг JSON
-        try:
-            # Убираем markdown блоки, если есть
-            clean_text = analysis_text.strip()
-            if clean_text.startswith("```json"):
-                clean_text = clean_text[7:]
-            if clean_text.startswith("```"):
-                clean_text = clean_text[3:]
-            if clean_text.endswith("```"):
-                clean_text = clean_text[:-3]
-
-            analysis_json = json.loads(clean_text.strip())
-        except json.JSONDecodeError as e:
-            logger.warning(f"JSON parse failed: {e}, using fallback")
-            analysis_json = {
-                "summary": analysis_text[:500],
-                "tasks": []
-            }
-
-        # 6. Создание Google Docs
+        # 4. Создание Google Docs
         doc_url = gdocs.create_doc(
-            title=f"Voice2Action Summary – {file.filename}",
-            content=f"# Резюме встречи\n\n{analysis_json.get('summary', 'Не найдено')}\n\n# Полный транскрипт\n\n{transcript.text}"
+            title=f"Транскрипт – {file.filename}",
+            content=f"# Транскрипт аудио\n\n{transcript_text}"
         )
 
         logger.info(f"Google Doc created: {doc_url}")
 
-        # 7. Создание Google Sheet
-        tasks = analysis_json.get('tasks', [])
-        if tasks:
-            sheet_url = gdocs.create_sheet(
-                title=f"Voice2Action Tasks – {file.filename}",
-                tasks=tasks
-            )
-            logger.info(f"Google Sheet created: {sheet_url}")
-        else:
-            sheet_url = None
-            logger.warning("No tasks found")
-
-        # 8. Ответ
+        # 5. Ответ
         return {
             "status": "success",
-            "transcript": transcript.text,
-            "summary": analysis_json.get('summary', 'Не найдено'),
-            "tasks": tasks,
+            "transcript": transcript_text,
             "google_doc": doc_url,
-            "google_sheet": sheet_url,
-            "analysis": analysis_text  # Для отладки
+            "message": "Аудио успешно обработано и сохранено в Google Docs"
         }
 
     except Exception as e:
