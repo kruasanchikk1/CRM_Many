@@ -125,11 +125,28 @@
     </div>
   </section>
 
+  <!-- ДЕМО: Загрузка аудио -->
+  <section class="demo-upload">
+    <div class="container">
+      <h2>Попробуй прямо сейчас</h2>
+      <p class="subtitle">Загрузи аудио встречи — получи summary + Google Doc за 2 минуты</p>
+
+      <div class="upload-form">
+        <input type="file" id="audioFile" accept="audio/*,.mp3,.wav,.ogg,.m4a" />
+        <button onclick="uploadAudio()" class="btn primary-btn">Обработать аудио</button>
+      </div>
+
+      <div id="uploadStatus" class="upload-status"></div>
+      <div id="uploadResult" class="upload-result"></div>
+    </div>
+  </section>
   <footer>
     <div class="container footer">
       <p>&copy; 2025 Voice2Action. AI для бизнеса | <a href="contact.html">Контакты</a></p>
     </div>
   </footer>
   <script src="js/main.js"></script>
+  <script src="js/upload.js"></script> <!-- ← НОВЫЙ ФАЙЛ -->
 </body>
 </html>
+

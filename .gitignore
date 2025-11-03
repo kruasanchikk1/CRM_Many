@@ -29,3 +29,6 @@ Thumbs.db
 # Telegram-бот
 telegram-bot/temp_*
 telegram-bot/__pycache__
+
+token.json
+credentials.json

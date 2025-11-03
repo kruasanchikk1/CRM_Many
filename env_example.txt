@@ -1,0 +1,35 @@
+# Telegram Bot
+TELEGRAM_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+
+# OpenAI API
+OPENAI_API_KEY=sk-proj-abc123...
+OPENAI_ORG_ID=org-xyz789
+
+# Jira
+JIRA_URL=https://your-company.atlassian.net
+JIRA_EMAIL=bot@company.com
+JIRA_API_TOKEN=ATATT3xFf...
+JIRA_PROJECT_KEY=V2A
+
+# Google Cloud (for Docs API)
+GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
+GOOGLE_DOCS_FOLDER_ID=1a2b3c4d5e6f7g8h
+
+# Database (optional)
+DATABASE_URL=postgresql://user:pass@localhost:5432/voice2action
+
+# Application
+APP_ENV=development
+DEBUG=true
+LOG_LEVEL=INFO
+SECRET_KEY=your-secret-key-here
+
+# Rate Limiting
+MAX_REQUESTS_PER_HOUR=10
+MAX_FILE_SIZE_MB=20
+MAX_AUDIO_DURATION_MINUTES=180
+
+# Feature Flags
+ENABLE_GOOGLE_DOCS=true
+ENABLE_SALES_ANALYSIS=true
+ENABLE_JIRA=true
