@@ -37,4 +37,5 @@ credentials.jsonbin/ffmpeg*
 
 credentials.json
 token.json
-*.json
+*.jsoncredentials.json
+token.json
