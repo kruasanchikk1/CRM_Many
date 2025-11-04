@@ -30,8 +30,6 @@ Thumbs.db
 telegram-bot/temp_*
 telegram-bot/__pycache__
 
-token.json
-credentials.json
-service-account-key.json
-*.json
-.env
+credentials.jsonbin/ffmpeg*
+*.tar.xz
+*.tar.gz

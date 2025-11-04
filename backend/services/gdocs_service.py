@@ -1,23 +1,22 @@
 import os
 import logging
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
+# --- SCOPES ---
 SCOPES = [
     'https://www.googleapis.com/auth/documents',
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/drive.file'
 ]
 
-CREDENTIALS_FILE = 'credentials.json'
-TOKEN_FILE = 'token.json'
-
+# --- Путь к credentials.json ---
+CREDENTIALS_FILE = 'credentials.json'  # В корне проекта
 
 class GoogleDocsService:
     def __init__(self):
@@ -27,96 +26,21 @@ class GoogleDocsService:
         self._authenticate()
 
     def _authenticate(self):
-        """OAuth через Service Account (для Render) или token.json (локально)"""
-        import json
+        """OAuth 2.0 авторизация через браузер"""
+        if not os.path.exists(CREDENTIALS_FILE):
+            raise FileNotFoundError(f"Файл {CREDENTIALS_FILE} не найден в корне проекта!")
 
-        creds = None
+        flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+        creds = flow.run_local_server(port=8000)  # ← ИЗМЕНИЛ НА 8080
 
-        # Проверка на Service Account (для продакшена на Render)
-        if os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"):
-            try:
-                service_account_info = json.loads(os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON"))
-                from google.oauth2 import service_account
-
-                creds = service_account.Credentials.from_service_account_info(
-                    service_account_info,
-                    scopes=SCOPES
-                )
-                logger.info(f"✅ Service Account подключён: {creds.service_account_email}")
-            except Exception as e:
-                logger.error(f"❌ Ошибка Service Account: {e}")
-                raise
-
-        # Локальная разработка (через token.json)
-        else:
-            if os.path.exists(TOKEN_FILE):
-                try:
-                    creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
-                    logger.info("✅ Токен загружен из token.json (локально)")
-                except Exception as e:
-                    logger.warning(f"⚠️ Токен повреждён, удаляем: {e}")
-                    os.remove(TOKEN_FILE)
-                    creds = None
-
-            if creds and creds.expired:
-                if creds.refresh_token:
-                    try:
-                        creds.refresh(Request())
-                        logger.info("✅ Токен обновлён через refresh_token")
-
-                        with open(TOKEN_FILE, 'w') as token:
-                            token.write(creds.to_json())
-                        logger.info("✅ Обновлённый токен сохранён")
-                    except Exception as e:
-                        logger.error(f"❌ Не удалось обновить токен: {e}")
-                        os.remove(TOKEN_FILE)
-                        creds = None
-                else:
-                    logger.warning("⚠️ refresh_token отсутствует, удаляем token.json")
-                    os.remove(TOKEN_FILE)
-                    creds = None
-
-            if not creds or not creds.valid:
-                if not os.path.exists(CREDENTIALS_FILE):
-                    raise FileNotFoundError(f"❌ {CREDENTIALS_FILE} не найден!")
-
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    CREDENTIALS_FILE,
-                    SCOPES,
-                    redirect_uri='http://localhost:8000/'
-                )
-
-                creds = flow.run_local_server(
-                    port=8000,
-                    access_type='offline',
-                    prompt='consent'
-                )
-
-                with open(TOKEN_FILE, 'w') as token:
-                    token.write(creds.to_json())
-                logger.info("✅ Новый токен сохранён в token.json")
-
-        # Подключить API
-        try:
-            self.docs_service = build('docs', 'v1', credentials=creds)
-            self.sheets_service = build('sheets', 'v4', credentials=creds)
-            self.drive_service = build('drive', 'v3', credentials=creds)
-            logger.info("✅ Google API подключён")
-            logger.info(f"✅ Docs service: {self.docs_service is not None}")
-            logger.info(f"✅ Sheets service: {self.sheets_service is not None}")
-            logger.info(f"✅ Drive service: {self.drive_service is not None}")
-        except Exception as e:
-            logger.error(f"❌ Не удалось подключить Google API: {e}")
-            raise
+        self.docs_service = build('docs', 'v1', credentials=creds)
+        self.sheets_service = build('sheets', 'v4', credentials=creds)
+        self.drive_service = build('drive', 'v3', credentials=creds)
+        logger.info("Google API подключён через OAuth")
 
     def create_doc(self, title: str, content: str) -> str:
         """Создаёт Google Doc"""
         try:
-            # Проверка инициализации
-            if not self.docs_service:
-                logger.error("❌ Docs service not initialized")
-                raise Exception("Google Docs service not available")
-
             doc = self.docs_service.documents().create(body={'title': title}).execute()
             doc_id = doc['documentId']
 
@@ -130,6 +54,7 @@ class GoogleDocsService:
                 documentId=doc_id, body={'requests': requests}
             ).execute()
 
+            # Делаем доступным
             self.drive_service.permissions().create(
                 fileId=doc_id,
                 body={'type': 'anyone', 'role': 'reader'}
@@ -143,13 +68,8 @@ class GoogleDocsService:
             raise
 
     def create_sheet(self, title: str, tasks: list) -> str:
-        """Создаёт Google Sheet"""
+        """Создаёт Google Sheet с задачами"""
         try:
-            # Проверка инициализации
-            if not self.sheets_service:
-                logger.error("❌ Sheets service not initialized")
-                raise Exception("Google Sheets service not available")
-
             spreadsheet = {
                 'properties': {'title': title},
                 'sheets': [{'properties': {'title': 'Задачи'}}]
@@ -157,13 +77,13 @@ class GoogleDocsService:
             sheet = self.sheets_service.spreadsheets().create(body=spreadsheet).execute()
             sheet_id = sheet['spreadsheetId']
 
-            values = [['Задача', 'Дедлайн', 'Ответственный', 'Приоритет']]
+            # Заголовки
+            values = [['Задача', 'Дедлайн', 'Ответственный']]
             for task in tasks:
                 values.append([
                     task.get('description', ''),
                     task.get('deadline', '—'),
-                    task.get('assignee', '—'),
-                    task.get('priority', '—')
+                    task.get('assignee', '—')
                 ])
 
             self.sheets_service.spreadsheets().values().update(
@@ -173,6 +93,7 @@ class GoogleDocsService:
                 body={'values': values}
             ).execute()
 
+            # Доступ
             self.drive_service.permissions().create(
                 fileId=sheet_id,
                 body={'type': 'anyone', 'role': 'reader'}
@@ -185,19 +106,19 @@ class GoogleDocsService:
             logger.error(f"Ошибка создания Sheet: {e}")
             raise
 
-
+# --- ТЕСТ ---
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     try:
         service = GoogleDocsService()
         doc_url = service.create_doc(
             "Тест Voice2Action",
-            "Это автоматически созданный документ через AI."
+            "Привет! Это тест документа, созданного AI."
         )
         print(f"Документ: {doc_url}")
 
         sheet_url = service.create_sheet("Тест Задачи", [
-            {"description": "Сделать презентацию", "deadline": "2025-11-05", "assignee": "Антон", "priority": "High"}
+            {"description": "Сделать презентацию", "deadline": "2025-11-05", "assignee": "Антон"}
         ])
         print(f"Таблица: {sheet_url}")
     except Exception as e:
