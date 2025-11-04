@@ -33,3 +33,8 @@ telegram-bot/__pycache__
 credentials.jsonbin/ffmpeg*
 *.tar.xz
 *.tar.gz
+
+
+credentials.json
+token.json
+*.json
