@@ -1,25 +1,24 @@
 import os
 import uuid
 import logging
-import tempfile
 from typing import Optional, List
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from dotenv import load_dotenv
 
-# Импорт Yandex сервисов (ИСПРАВЛЕНО!)
+# ⚠️ КРИТИЧНО: Загрузка переменных окружения
+load_dotenv()
+
+# Импорт Yandex сервисов
 try:
     from services.yandex_stt import transcribe_audio
     from services.yandex_gpt import analyze_transcript
     from services.gdocs_service import GoogleDocsService
 except ImportError:
-    # Для локальной разработки
     from backend.services.yandex_stt import transcribe_audio
     from backend.services.yandex_gpt import analyze_transcript
     from backend.services.gdocs_service import GoogleDocsService
-
-load_dotenv()
 
 app = FastAPI(title="Voice2Action API v2.0")
 
@@ -36,20 +35,20 @@ app.add_middleware(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Google Docs сервис (инициализируется при старте)
+# Google Docs сервис
 try:
     gdocs = GoogleDocsService()
 except Exception as e:
     logger.error(f"Failed to initialize Google Docs: {e}")
     gdocs = None
 
-# In-memory хранилище задач (в продакшене использовать Redis/PostgreSQL)
+# In-memory хранилище задач
 jobs = {}
 
 
 class ExportRequest(BaseModel):
     job_id: str
-    exports: List[str]  # ["google_docs", "google_sheets"]
+    exports: List[str]
 
 
 class JobStatus(BaseModel):
@@ -73,18 +72,11 @@ async def root():
 
 @app.post("/api/process-audio")
 async def process_audio(
-        audio: UploadFile = File(...),
-        background_tasks: BackgroundTasks = None
+    audio: UploadFile = File(...),
+    background_tasks: BackgroundTasks = None
 ):
-    """
-    Загрузка аудио и запуск обработки
-
-    Pipeline:
-    1. Yandex SpeechKit (транскрибация)
-    2. YandexGPT (анализ и извлечение задач)
-    3. Google Docs/Sheets (опционально через /api/export)
-    """
-
+    """Загрузка аудио и запуск обработки"""
+    
     try:
         # 1. Валидация формата
         valid_types = [
@@ -93,22 +85,22 @@ async def process_audio(
         ]
         if audio.content_type and audio.content_type not in valid_types:
             logger.warning(f"Unsupported content type: {audio.content_type}")
-
+        
         # 2. Валидация размера (25MB)
         content = await audio.read()
         if len(content) > 25 * 1024 * 1024:
             raise HTTPException(400, "File too large (max 25MB)")
-
+        
         logger.info(f"Processing file: {audio.filename}, size: {len(content)} bytes")
-
+        
         # 3. Генерация job_id
         job_id = str(uuid.uuid4())
         file_path = f"/tmp/{job_id}_{audio.filename}"
-
+        
         # 4. Сохранение файла
         with open(file_path, "wb") as f:
             f.write(content)
-
+        
         # 5. Инициализация job
         jobs[job_id] = {
             "status": "queued",
@@ -119,17 +111,17 @@ async def process_audio(
             "file_path": file_path,
             "filename": audio.filename
         }
-
+        
         # 6. Запуск фоновой обработки
         background_tasks.add_task(process_pipeline, job_id, file_path)
-
+        
         logger.info(f"Job {job_id} created for file {audio.filename}")
         return {
             "job_id": job_id,
             "message": "Processing started",
             "status_url": f"/api/status/{job_id}"
         }
-
+    
     except Exception as e:
         logger.error(f"Failed to create job: {e}")
         raise HTTPException(500, f"Failed to process audio: {str(e)}")
@@ -140,41 +132,34 @@ async def get_status(job_id: str):
     """Проверка статуса обработки"""
     if job_id not in jobs:
         raise HTTPException(404, "Job not found")
-
+    
     job = jobs[job_id].copy()
-    # Убираем временные данные из ответа
     job.pop("file_path", None)
-
+    
     return job
 
 
 @app.post("/api/export")
 async def export_results(request: ExportRequest):
-    """
-    Экспорт результатов в Google Docs/Sheets
-
-    Exports:
-    - google_docs: Google Document с резюме и транскриптом
-    - google_sheets: Google Spreadsheet с задачами
-    """
-
+    """Экспорт результатов в Google Docs/Sheets"""
+    
     if request.job_id not in jobs:
         raise HTTPException(404, "Job not found")
-
+    
     job = jobs[request.job_id]
-
+    
     if not job["complete"]:
         raise HTTPException(400, "Job not completed yet")
-
+    
     if job["error"]:
         raise HTTPException(400, f"Job failed: {job['error']}")
-
+    
     if not gdocs:
         raise HTTPException(500, "Google Docs service not initialized")
-
+    
     results = job["results"]
     exports = {}
-
+    
     try:
         # Google Docs экспорт
         if "google_docs" in request.exports:
@@ -194,18 +179,18 @@ async def export_results(request: ExportRequest):
 
 {results['transcript']}
 """
-
+            
             doc_url = gdocs.create_doc(
                 title=f"Voice2Action – {job['filename']}",
                 content=doc_content
             )
-
+            
             exports["google_docs"] = {
                 "status": "success",
                 "doc_url": doc_url
             }
             logger.info(f"Google Doc created for job {request.job_id}")
-
+        
         # Google Sheets экспорт
         if "google_sheets" in request.exports:
             tasks = results.get('tasks', [])
@@ -224,22 +209,16 @@ async def export_results(request: ExportRequest):
                     "status": "skipped",
                     "reason": "No tasks found"
                 }
-
+        
         return {"job_id": request.job_id, "exports": exports}
-
+    
     except Exception as e:
         logger.error(f"Export failed for job {request.job_id}: {e}")
         raise HTTPException(500, f"Export failed: {str(e)}")
 
 
 async def process_pipeline(job_id: str, file_path: str):
-    """
-    Основной pipeline обработки аудио
-
-    1. Транскрибация через Yandex SpeechKit
-    2. Анализ через YandexGPT
-    3. Сохранение результатов
-    """
+    """Основной pipeline обработки аудио"""
     try:
         # Шаг 1: Транскрибация
         jobs[job_id].update({
@@ -247,26 +226,26 @@ async def process_pipeline(job_id: str, file_path: str):
             "progress": 20
         })
         logger.info(f"Job {job_id}: Starting transcription")
-
+        
         transcript_data = await transcribe_audio(file_path)
         transcript = transcript_data["text"]
-
+        
         if not transcript or len(transcript) < 10:
             raise ValueError("Транскрипт пустой или слишком короткий")
-
+        
         logger.info(f"Job {job_id}: Transcription completed ({len(transcript)} chars)")
-
+        
         # Шаг 2: AI анализ
         jobs[job_id].update({
             "status": "Анализ текста (YandexGPT)...",
             "progress": 50
         })
         logger.info(f"Job {job_id}: Starting analysis")
-
+        
         analysis = await analyze_transcript(transcript)
-
+        
         logger.info(f"Job {job_id}: Analysis completed")
-
+        
         # Шаг 3: Финализация
         jobs[job_id].update({
             "status": "Готово",
@@ -281,9 +260,9 @@ async def process_pipeline(job_id: str, file_path: str):
                 "duration_seconds": transcript_data.get("duration", 0)
             }
         })
-
+        
         logger.info(f"Job {job_id}: Completed successfully")
-
+    
     except Exception as e:
         logger.error(f"Job {job_id} failed: {e}", exc_info=True)
         jobs[job_id].update({
@@ -292,7 +271,7 @@ async def process_pipeline(job_id: str, file_path: str):
             "complete": True,
             "progress": 0
         })
-
+    
     finally:
         # Удаление временного файла
         try:
@@ -303,13 +282,13 @@ async def process_pipeline(job_id: str, file_path: str):
             logger.error(f"Failed to remove temp file: {e}")
 
 
-# Health check endpoint
 @app.get("/health")
 async def health_check():
     """Проверка работоспособности API"""
     return {
         "status": "healthy",
         "yandex_api": os.getenv("YANDEX_API_KEY") is not None,
+        "yandex_folder": os.getenv("YANDEX_FOLDER_ID") is not None,
         "google_docs": gdocs is not None,
         "active_jobs": len([j for j in jobs.values() if not j["complete"]])
     }
@@ -317,5 +296,4 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)
