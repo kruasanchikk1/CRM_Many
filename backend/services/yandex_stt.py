@@ -1,85 +1,65 @@
-# backend/services/yandex_stt.py
 import os
+import requests
+import json
 import logging
-import grpc
-import sys
-from pydub import AudioSegment
-from yandex.cloud.ai.stt.v3 import stt_pb2, stt_service_pb2_grpc
-
-# Настройка ffmpeg на Linux (Render)
-if sys.platform.startswith("linux"):
-    AudioSegment.ffmpeg = "./bin/ffmpeg"
-    # AudioSegment.ffprobe = "./bin/ffprobe"  # если добавишь
+from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
-YANDEX_API_KEY = os.getenv("YANDEX_API_KEY")
 
-def convert_to_wav_16k(input_path: str) -> str:
-    """Конвертирует любой аудио в WAV 16kHz mono"""
-    audio = AudioSegment.from_file(input_path)
-    audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
-    wav_path = input_path + ".wav"
-    audio.export(wav_path, format="wav")
-    return wav_path
 
-async def transcribe_audio(audio_path: str) -> dict:
-    if not YANDEX_API_KEY:
-        raise ValueError("YANDEX_API_KEY не найден")
-
-    channel = None
-    wav_path = None
-
+async def transcribe_audio(audio_path: str) -> Dict[str, Any]:
+    """
+    Транскрибация аудио через Yandex SpeechKit REST API
+    """
     try:
-        logger.info(f"Конвертация аудио: {audio_path}")
-        wav_path = convert_to_wav_16k(audio_path)
+        # Чтение аудио файла
+        with open(audio_path, 'rb') as audio_file:
+            audio_data = audio_file.read()
 
-        with open(wav_path, "rb") as f:
-            audio_data = f.read()
+        # Определяем формат аудио по расширению
+        file_ext = audio_path.lower().split('.')[-1]
+        content_type = f"audio/{file_ext}"
 
-        if len(audio_data) > 1_000_000:
-            raise ValueError("Аудио слишком длинное (>1МБ). Максимум ~60 секунд.")
+        if file_ext == 'mp3':
+            content_type = 'audio/mpeg'
+        elif file_ext == 'wav':
+            content_type = 'audio/wav'
+        elif file_ext == 'ogg':
+            content_type = 'audio/ogg'
 
-        channel = grpc.aio.secure_channel('stt.api.cloud.yandex.net:443')
-        stub = stt_service_pb2_grpc.RecognizerStub(channel)
-        metadata = [('authorization', f'Api-Key {YANDEX_API_KEY}')]
+        # Подготовка заголовков
+        headers = {
+            'Authorization': f'Api-Key {os.getenv("YANDEX_API_KEY")}',
+            'Content-Type': content_type
+        }
 
-        request = stt_pb2.RecognizeRequest(
-            config=stt_pb2.RecognitionConfig(
-                specification=stt_pb2.RecognitionSpec(
-                    language_code='ru-RU',
-                    model='general',
-                    audio_encoding=stt_pb2.RecognitionSpec.LINEAR16_PCM,
-                    sample_rate_hertz=16000,
-                )
-            ),
-            audio=stt_pb2.AudioChunk(content=audio_data)
+        params = {
+            'folderId': os.getenv('YANDEX_FOLDER_ID'),
+            'lang': 'ru-RU'
+        }
+
+        # Отправка запроса к SpeechKit
+        response = requests.post(
+            'https://stt.api.cloud.yandex.net/speech/v1/stt:recognize',
+            headers=headers,
+            params=params,
+            data=audio_data
         )
 
-        response = await stub.Recognize(request, metadata=metadata)
+        if response.status_code == 200:
+            result = response.json()
+            text = result.get("result", "")
 
-        transcript = " ".join([
-            alt.text for chunk in response.chunks
-            for alt in chunk.alternatives
-        ]).strip()
+            logger.info(f"Transcription successful: {len(text)} chars")
 
-        logger.info(f"Транскрибация завершена: {len(transcript)} символов")
-        return {"text": transcript, "language": "ru"}
+            return {
+                "text": text,
+                "duration": 0  # Можно вычислить из файла при необходимости
+            }
+        else:
+            logger.error(f"SpeechKit error: {response.status_code} - {response.text}")
+            raise Exception(f"SpeechKit API error: {response.status_code} - {response.text}")
 
     except Exception as e:
-        logger.error(f"Ошибка STT: {e}")
+        logger.error(f"Transcription failed: {e}")
         raise
-
-    finally:
-        # Удаление временного файла
-        if wav_path and os.path.exists(wav_path):
-            try:
-                os.remove(wav_path)
-            except Exception as e:
-                logger.warning(f"Не удалось удалить {wav_path}: {e}")
-
-        # Закрытие gRPC
-        if channel:
-            try:
-                await channel.close()
-            except Exception as e:
-                logger.warning(f"Ошибка закрытия gRPC: {e}")
