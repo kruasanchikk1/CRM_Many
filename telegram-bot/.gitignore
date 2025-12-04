@@ -1,0 +1,41 @@
+# Секреты и пароли
+.env
+*.env
+secrets/
+config/
+
+# Виртуальные окружения
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Временные файлы
+*.log
+temp_*
+*.tmp
+*.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ОС
+Thumbs.db
+.DS_Store
+
+# Telegram-бот
+telegram-bot/temp_*
+telegram-bot/__pycache__
+
+credentials.jsonbin/ffmpeg*
+*.tar.xz
+*.tar.gz
+
+
+credentials.json
+token.json
+*.jsoncredentials.json
+token.json

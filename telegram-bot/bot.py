@@ -1,388 +1,337 @@
+"""
+Voice2Action Telegram Bot v2.2 (python-telegram-bot v21+)
+✅ Полная совместимость Python 3.14
+✅ Yandex SpeechKit + YandexGPT + Google Docs
+✅ Без Updater ошибок!
+"""
+
 import os
+import asyncio
 import logging
+from pathlib import Path
+import httpx
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters
+)
+from telegram.constants import ParseMode
 
-# Импорты сервисов (используем те же, что и в backend)
-import sys
-sys.path.append('../backend')
-from services.transcription import transcribe_audio
-from services.analysis import analyze_transcript
-from services.excel_generator import generate_excel
-from services.word_generator import generate_word
-from services.jira_service import create_jira_issues
-from services.gdocs_service import create_google_doc
-
+# Конфигурация
 load_dotenv()
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+if not TELEGRAM_TOKEN:
+    print("❌ TELEGRAM_TOKEN не найден в .env!")
+    exit(1)
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
+# Глобальное приложение для send_message
+application = None
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Команда /start"""
-    welcome_text = """
-👋 Добро пожаловать в Voice2Action!
-
-Я превращаю ваши голосовые встречи в готовые документы и задачи.
-
-🎙 **Как использовать:**
-1. Отправь мне голосовое сообщение или аудио файл
-2. Выбери тип анализа (встреча, продажи, интервью)
-3. Выбери куда экспортировать (Excel, Word, Jira, Google Docs)
-4. Получи готовые результаты!
-
-📋 **Команды:**
-/help - Помощь
-/feedback - Отправить отзыв
-
-⚡️ Давай начнём! Отправь аудио файл.
-"""
-    await update.message.reply_text(welcome_text)
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /help"""
-    help_text = """
-📚 **Возможности Voice2Action:**
-
-🎯 **Типы анализа:**
-• Встреча - Summary + задачи + протокол
-• Продажи - Анализ звонка + рекомендации
-• Интервью - Оценка кандидата
-• Кастом - Свой промпт
-
-📤 **Экспорт:**
-• Excel - Таблица с задачами
-• Word - Официальный протокол
-• Jira - Автоматическое создание тикетов
-• Google Docs - Документ в вашем Drive
-
-⚙️ **Поддерживаемые форматы:**
-MP3, OGG, WAV, M4A (до 20 МБ, до 3 часов)
-
-💡 **Совет:** Записывай встречи в хорошем качестве для лучшего результата!
-"""
-    await update.message.reply_text(help_text)
-
-
-async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка голосового сообщения или аудио файла"""
-    message = update.message
-    user_id = message.from_user.id
-    
-    # Определяем тип аудио
-    if message.voice:
-        file = await message.voice.get_file()
-        file_path = f'/tmp/temp_{user_id}_{file.file_id}.ogg'
-    elif message.audio:
-        file = await message.audio.get_file()
-        file_path = f'/tmp/temp_{user_id}_{file.file_id}.mp3'
-    else:
-        await message.reply_text("Пожалуйста, отправь голосовое сообщение или аудио файл.")
-        return
-    
-    # Скачиваем файл
-    await file.download_to_drive(file_path)
-    
-    # Сохраняем путь в контексте пользователя
-    context.user_data['audio_file'] = file_path
-    
-    await message.reply_text('🎧 Аудио получено!')
-    
-    # Показываем меню выбора типа анализа
-    keyboard = [
-        [InlineKeyboardButton("📊 Встреча", callback_data="analysis_meeting")],
-        [InlineKeyboardButton("💼 Продажи", callback_data="analysis_sales")],
-        [InlineKeyboardButton("👤 Интервью", callback_data="analysis_interview")],
-        [InlineKeyboardButton("✏️ Кастом", callback_data="analysis_custom")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await message.reply_text(
-        "Выбери тип анализа:",
-        reply_markup=reply_markup
+    text = (
+        "🎙️ *Voice2Action Bot*\n\n"
+        "🚀 *Что делает:*\n"
+        "• Транскрипция → Yandex SpeechKit\n"
+        "• Анализ → YandexGPT\n"
+        "• Резюме + задачи + Google Docs\n\n"
+        "*Отправь голосовое или аудио (≤25MB)!*"
     )
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 
-async def button_analysis_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Команда /help"""
+    text = (
+        "📖 *Инструкция:*\n\n"
+        f"1️⃣ Голосовое / аудио (MP3/OGG/WAV ≤25MB)\n"
+        "2️⃣ Выбери тип анализа\n"
+        "3️⃣ Результат за 30-120 сек\n\n"
+        f"*Backend:* {API_BASE_URL}\n"
+        f"*Swagger:* {API_BASE_URL}/docs"
+    )
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+
+async def handle_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка голосовых и аудио файлов"""
+    message = update.message
+
+    try:
+        # Получаем файл
+        if message.voice:
+            file = await message.voice.get_file()
+            filename = f"voice_{message.message_id}.ogg"
+        elif message.audio:
+            file = await message.audio.get_file()
+            ext = Path(file.file_path or "").suffix or ".mp3"
+            filename = f"audio_{message.message_id}{ext}"
+        else:
+            await message.reply_text("❌ Отправь голосовое или аудио файл!")
+            return
+
+        # Сохраняем локально
+        file_path = Path(filename)
+        await file.download_to_drive(str(file_path))
+        context.user_data["file_path"] = str(file_path)
+
+        # Кнопки анализа
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✨ Авто", callback_data="auto"),
+                InlineKeyboardButton("📋 Встреча", callback_data="meeting")
+            ],
+            [
+                InlineKeyboardButton("💼 Продажи", callback_data="sales"),
+                InlineKeyboardButton("👤 Интервью", callback_data="interview")
+            ],
+            [InlineKeyboardButton("📝 Лекция", callback_data="lecture")]
+        ])
+
+        # Размер файла
+        size_mb = file_path.stat().st_size / (1024 * 1024)
+        await message.reply_text(
+            f"✅ *Файл загружен!*\n\n"
+            f"📁 `{filename}` ({size_mb:.1f} МБ)\n\n"
+            "🎯 *Выбери тип анализа:*",
+            reply_markup=keyboard,
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    except Exception as e:
+        logger.error(f"File download error: {e}")
+        await message.reply_text("❌ Ошибка загрузки файла. Попробуй другой!")
+
+
+async def analysis_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработка выбора типа анализа"""
     query = update.callback_query
     await query.answer()
-    
-    analysis_type = query.data.split("_")[1]
-    context.user_data['analysis_type'] = analysis_type
-    
-    # Если кастом - запрашиваем промпт
-    if analysis_type == "custom":
-        await query.edit_message_text(
-            "✏️ Отправь свой промпт для анализа\n\nИспользуй {transcript} для вставки транскрипта."
-        )
-        context.user_data['awaiting_custom_prompt'] = True
+
+    analysis_type = query.data
+    file_path = context.user_data.get("file_path")
+
+    if not file_path or not Path(file_path).exists():
+        await query.edit_message_text("❌ Файл потерян. Отправь заново!")
         return
-    
-    # Иначе переходим к выбору экспорта
-    await show_export_menu(query, context)
 
+    # Обновляем сообщение
+    analysis_names = {
+        "auto": "Авто (YandexGPT выберет)",
+        "meeting": "Встреча",
+        "sales": "Продажи",
+        "interview": "Интервью",
+        "lecture": "Лекция"
+    }
+    name = analysis_names.get(analysis_type, analysis_type.title())
 
-async def show_export_menu(query_or_message, context: ContextTypes.DEFAULT_TYPE):
-    """Показать меню выбора экспорта"""
-    keyboard = [
-        [
-            InlineKeyboardButton("📊 Excel", callback_data="export_excel"),
-            InlineKeyboardButton("📄 Word", callback_data="export_word")
-        ],
-        [
-            InlineKeyboardButton("🎫 Jira", callback_data="export_jira"),
-            InlineKeyboardButton("📝 Google Docs", callback_data="export_gdocs")
-        ],
-        [InlineKeyboardButton("✅ Готово (начать)", callback_data="export_done")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    text = "Выбери форматы экспорта (можно несколько):\n\n"
-    
-    # Показываем уже выбранные
-    selected = context.user_data.get('exports', [])
-    if selected:
-        text += "✅ Выбрано: " + ", ".join(selected) + "\n\n"
-    
-    text += "Нажми 'Готово' для запуска обработки."
-    
-    if hasattr(query_or_message, 'edit_message_text'):
-        await query_or_message.edit_message_text(text, reply_markup=reply_markup)
-    else:
-        await query_or_message.reply_text(text, reply_markup=reply_markup)
+    await query.edit_message_text(
+        f"🚀 *{name} анализ запущен...*\n\n"
+        "⏳ Yandex SpeechKit → YandexGPT → результаты\n"
+        "(30-120 секунд)"
+    )
 
-
-async def button_export_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка выбора формата экспорта"""
-    query = update.callback_query
-    await query.answer()
-    
-    export_type = query.data.split("_")[1]
-    
-    if export_type == "done":
-        # Запускаем обработку
-        await start_processing(query, context)
-    else:
-        # Добавляем/убираем формат из списка
-        exports = context.user_data.get('exports', [])
-        
-        if export_type in exports:
-            exports.remove(export_type)
-        else:
-            exports.append(export_type)
-        
-        context.user_data['exports'] = exports
-        
-        # Обновляем меню
-        await show_export_menu(query, context)
-
-
-async def start_processing(query, context: ContextTypes.DEFAULT_TYPE):
-    """Запуск обработки аудио"""
-    await query.edit_message_text("⏳ Начинаю обработку...")
-    
-    file_path = context.user_data.get('audio_file')
-    analysis_type = context.user_data.get('analysis_type', 'meeting')
-    custom_prompt = context.user_data.get('custom_prompt')
-    exports = context.user_data.get('exports', [])
-    
-    if not file_path:
-        await query.message.reply_text("Ошибка: аудио файл не найден. Отправь файл заново.")
-        return
-    
-    if not exports:
-        await query.message.reply_text("Выбери хотя бы один формат экспорта!")
-        await show_export_menu(query.message, context)
-        return
-    
     try:
-        # Шаг 1: Транскрибация
-        await query.message.reply_text("🎯 Транскрибирую аудио...")
-        transcript_data = await transcribe_audio(file_path)
-        transcript = transcript_data["text"]
-        
-        # Шаг 2: Анализ
-        await query.message.reply_text("🧠 Анализирую содержание...")
-        analysis = await analyze_transcript(
-            transcript, 
-            analysis_type=analysis_type,
-            custom_prompt=custom_prompt
+        # 1. Загрузка в backend
+        job_id = await upload_audio(file_path, analysis_type)
+        await query.message.reply_text(
+            f"✅ *Job создан!*\n\n"
+            f"🆔 `{job_id}`\n"
+            f"⏳ Отслеживаю статус..."
         )
-        
-        # Шаг 3: Экспорт
-        results = []
-        
-        if 'excel' in exports:
-            await query.message.reply_text("📊 Создаю Excel...")
-            excel_path = generate_excel(analysis, transcript)
-            await query.message.reply_document(
-                document=open(excel_path, 'rb'),
-                filename="analysis.xlsx"
-            )
-            os.remove(excel_path)
-            results.append("✅ Excel")
-        
-        if 'word' in exports:
-            await query.message.reply_text("📄 Создаю Word...")
-            word_path = generate_word(analysis, transcript)
-            await query.message.reply_document(
-                document=open(word_path, 'rb'),
-                filename="protocol.docx"
-            )
-            os.remove(word_path)
-            results.append("✅ Word")
-        
-        if 'jira' in exports:
-            await query.message.reply_text("🎫 Создаю задачи в Jira...")
-            tasks = parse_tasks(analysis)
-            jira_issues = create_jira_issues(tasks)
-            
-            jira_text = "✅ Jira тикеты:\n"
-            for issue in jira_issues:
-                jira_text += f"• {issue['key']}: {issue['url']}\n"
-            
-            await query.message.reply_text(jira_text)
-            results.append("✅ Jira")
-        
-        if 'gdocs' in exports:
-            await query.message.reply_text("📝 Создаю Google Doc...")
-            doc_url = create_google_doc(transcript, analysis)
-            await query.message.reply_text(f"✅ Google Doc: {doc_url}")
-            results.append("✅ Google Docs")
-        
-        # Финальное сообщение
-        summary = extract_summary(analysis)
-        
-        final_message = f"""
-✅ **Обработка завершена!**
 
-📋 **Summary:**
-{summary}
+        # 2. Polling результата
+        job = await poll_job(job_id)
 
-📤 **Экспорт:**
-{chr(10).join(results)}
+        # 3. Показываем результат
+        await show_results(job, query.message.chat_id)
 
-⏱ Время обработки: {transcript_data.get('duration', 0) / 60:.1f} мин
-"""
-        
-        await query.message.reply_text(final_message, parse_mode='Markdown')
-        
     except Exception as e:
-        logger.error(f"Processing failed: {e}")
-        await query.message.reply_text(f"❌ Ошибка: {str(e)}")
-    
+        logger.error(f"Analysis error: {e}")
+        await query.message.reply_text(f"❌ *Ошибка:* {str(e)}")
     finally:
         # Очистка
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        context.user_data.clear()
+        cleanup_file(file_path)
+        if "file_path" in context.user_data:
+            del context.user_data["file_path"]
 
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка текстовых сообщений (для кастомных промптов)"""
-    if context.user_data.get('awaiting_custom_prompt'):
-        context.user_data['custom_prompt'] = update.message.text
-        context.user_data['awaiting_custom_prompt'] = False
-        
-        await update.message.reply_text("✅ Промпт сохранён!")
-        await show_export_menu(update.message, context)
-    else:
-        await update.message.reply_text(
-            "Отправь голосовое сообщение или аудио файл для обработки.\n"
-            "Используй /help для справки."
-        )
+async def upload_audio(file_path: str, analysis_type: str) -> str:
+    """Отправка аудио в FastAPI backend"""
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        with open(file_path, "rb") as audio_file:
+            files = {"audio": (Path(file_path).name, audio_file)}
+            data = {"analysis_type": analysis_type}
+            response = await client.post(
+                f"{API_BASE_URL}/api/process-audio",
+                files=files,
+                data=data
+            )
+        response.raise_for_status()
+        return response.json()["job_id"]
 
 
-async def feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /feedback"""
-    if context.args:
-        feedback_text = ' '.join(context.args)
-        logger.info(f"Feedback from {update.message.from_user.id}: {feedback_text}")
-        await update.message.reply_text("Спасибо за отзыв! Мы обязательно его учтём.")
-    else:
-        await update.message.reply_text(
-            "Отправь отзыв командой:\n/feedback Ваш текст здесь"
-        )
+async def poll_job(job_id: str) -> dict:
+    """Опрос статуса job (максимум 3 минуты)"""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for attempt in range(90):
+            try:
+                response = await client.get(f"{API_BASE_URL}/api/jobs/{job_id}")
+                if response.status_code != 200:
+                    await asyncio.sleep(2)
+                    continue
+
+                job = response.json()
+                status = job.get("status", "processing")
+
+                if status == "completed":
+                    return job
+                if status == "failed":
+                    raise RuntimeError(job.get("error", "Unknown backend error"))
+
+            except Exception as e:
+                logger.warning(f"Poll attempt {attempt}: {e}")
+
+            await asyncio.sleep(2)
+
+        raise RuntimeError("⏰ Таймаут обработки (3 минуты)")
 
 
-def parse_tasks(analysis: str) -> list:
-    """Парсинг задач из анализа"""
-    tasks = []
-    lines = analysis.split('\n')
-    
-    current_task = None
-    for line in lines:
-        if 'Задача:' in line:
-            if current_task:
-                tasks.append(current_task)
-            
-            current_task = {
-                'description': line.split('Задача:')[1].strip(),
-                'deadline': 'Не указан',
-                'assignee': 'Не указан',
-                'priority': 'Средний'
-            }
-        elif current_task:
-            if 'Дедлайн:' in line:
-                current_task['deadline'] = line.split('Дедлайн:')[1].strip()
-            elif 'Ответственный:' in line:
-                current_task['assignee'] = line.split('Ответственный:')[1].strip()
-            elif 'Приоритет:' in line:
-                current_task['priority'] = line.split('Приоритет:')[1].strip()
-    
-    if current_task:
-        tasks.append(current_task)
-    
-    return tasks
+async def show_results(job: dict, chat_id: int) -> None:
+    """Отображение финальных результатов"""
+    global application
+    analysis = job.get("analysis", {})
+
+    # Основные данные
+    job_id = job.get("job_id", "—")
+    summary = analysis.get("summary", "Резюме недоступно")
+    tasks = analysis.get("tasks", [])
+
+    # Форматируем задачи
+    tasks_text = "✅ *Задачи не найдены*"
+    if tasks:
+        tasks_text = ""
+        for i, task in enumerate(tasks, 1):
+            desc = task.get("description", task.get("task", "—"))
+            meta = []
+            if deadline := task.get("deadline"):
+                meta.append(f"📅 {deadline}")
+            if assignee := task.get("assignee"):
+                meta.append(f"👤 {assignee}")
+            meta_str = f" ({', '.join(meta)})" if meta else ""
+            tasks_text += f"{i}. {desc}{meta_str}\n"
+
+    # Документы
+    docs = []
+    if doc_url := analysis.get("doc_url"):
+        docs.append(f"📝 [Google Doc]({doc_url})")
+    if sheet_url := analysis.get("sheet_url"):
+        if sheet_url != "Нет задач для экспорта":
+            docs.append(f"📊 [Google Sheet]({sheet_url})")
+
+    docs_text = "\n".join(docs) if docs else "📄 Документы создаются автоматически"
+
+    # Формируем сообщение
+    text = (
+        f"🎉 *РЕЗУЛЬТАТ ГОТОВ!*\n\n"
+        f"🆔 *Job ID:* `{job_id}`\n\n"
+        f"📋 *РЕЗЮМЕ:*\n{summary}\n\n"
+        f"✅ *ЗАДАЧИ ({len(tasks)}):*\n{tasks_text}\n\n"
+        f"🔗 *ДОКУМЕНТЫ:*\n{docs_text}"
+    )
+
+    # Клавиатура
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🎙️ Новое аудио", callback_data="new_audio"),
+            InlineKeyboardButton("📊 Swagger", url="https://httpbin.org/anything")
+        ]
+    ])
+    logger.info(f"Swagger URL button: {API_BASE_URL.rstrip('/') + '/docs'}")
+
+    await application.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=keyboard,
+        disable_web_page_preview=True
+    )
 
 
-def extract_summary(analysis: str) -> str:
-    """Извлечение summary"""
-    lines = analysis.split('\n')
-    summary_lines = []
-    in_summary = False
-    
-    for line in lines:
-        if 'Summary' in line or 'Резюме' in line:
-            in_summary = True
-            continue
-        if in_summary:
-            if line.strip().startswith('##'):
-                break
-            if line.strip():
-                summary_lines.append(line.strip())
-    
-    return ' '.join(summary_lines)[:300] + "..." if summary_lines else "Резюме не найдено"
+async def new_audio_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка "Новое аудио"""
+    query = update.callback_query
+    await query.answer()
+
+    context.user_data.clear()
+    await query.message.reply_text(
+        "✅ *Готов к новому аудио!* 🎧\n\n"
+        "Отправь голосовое или аудио файл!",
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 
-def main():
-    """Запуск бота"""
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
-    
-    # Команды
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("feedback", feedback))
-    
-    # Аудио
-    app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_audio))
-    
-    # Текст (для кастомных промптов)
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    
-    # Кнопки
-    app.add_handler(CallbackQueryHandler(button_analysis_type, pattern="^analysis_"))
-    app.add_handler(CallbackQueryHandler(button_export_type, pattern="^export_"))
-    
-    logger.info("Bot started")
-    app.run_polling()
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка текстовых сообщений"""
+    await update.message.reply_text(
+        "🎙️ *Пришли голосовое или аудио!*\n\n"
+        "/start — начать\n"
+        "/help — инструкция",
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 
-if __name__ == '__main__':
+def cleanup_file(file_path: str) -> None:
+    """Удаление временного файла"""
+    try:
+        if file_path and Path(file_path).exists():
+            Path(file_path).unlink()
+            logger.info(f"Cleaned up: {file_path}")
+    except Exception as e:
+        logger.warning(f"Cleanup failed: {e}")
+
+
+def main() -> None:
+    """Главная функция запуска"""
+    global application
+
+    print("🤖 Voice2Action Bot v2.2 (v21+)")
+    print(f"📡 Backend: {API_BASE_URL}")
+    print("🚀 Создание приложения...")
+
+    # Создаём приложение v21+
+    application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+    # Регистрируем обработчики
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+
+    application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_audio))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    application.add_handler(CallbackQueryHandler(analysis_choice, pattern="^(auto|meeting|sales|interview|lecture)$"))
+    application.add_handler(CallbackQueryHandler(new_audio_handler, pattern="^new_audio$"))
+
+    print("✅ Бот запущен! Отправь /start в Telegram")
+    print("🛑 Ctrl+C для остановки")
+
+    # Запуск polling
+    application.run_polling(drop_pending_updates=True)
+
+
+if __name__ == "__main__":
     main()
