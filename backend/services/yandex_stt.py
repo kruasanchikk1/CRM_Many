@@ -58,7 +58,9 @@ async def transcribe_audio(audio_path: str) -> dict:
             response.raise_for_status()
             result = response.json()
             text = result.get("result", "")
-            
+
+            logger.info(f"Распознанный текст: '{text}'")  # ← ВОТ ЭТА СТРОКА!
+
             if not text:
                 logger.warning("Пустой транскрипт от Yandex SpeechKit")
                 raise ValueError("Не удалось распознать речь")
