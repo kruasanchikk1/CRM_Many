@@ -69,8 +69,8 @@
 ✅ **ЧТО СОЗДАНО**:
 | Компонент | Статус | URL |
 |-----------|--------|-----|
-| 🌐 **СТАТИЧЕСКИЙ САЙТ** | ✅ Готов | [voice2action.netlify.app](voice2action.netlify.app) |
-| 🔌 **FASTAPI BACKEND** | ✅ Живой 24/7 | [voice2action-backend.onrender.com](voice2action-backend.onrender.com) |
+| 🌐 **СТАТИЧЕСКИЙ САЙТ** | ✅ Готов | [voice2action.netlify.app](https://voice2action.netlify.app) |
+| 🔌 **FASTAPI BACKEND** | ✅ Живой 24/7 | [voice2action-backend.onrender.com](https://voice2action-api-vq9x.onrender.com) |
 | 🤖 **TELEGRAM BOT** | 🔄 Деплой (последний шаг) | [@voice2action_bot](t.me/voice2action_bot) |
 | 🧠 **YANDEX SPEECHKIT** | ✅ Транскрипция ru-RU | Работает |
 | 🧠 **YANDEXGPT** | ✅ Анализ (5 сценариев) | Авто/Встреча/Продажи/Интервью/Лекция |
