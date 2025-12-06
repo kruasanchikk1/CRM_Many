@@ -69,9 +69,9 @@
 ✅ **ЧТО СОЗДАНО**:
 | Компонент | Статус | URL |
 |-----------|--------|-----|
-| 🌐 **СТАТИЧЕСКИЙ САЙТ** | ✅ Готов | [voice2action.netlify.app](https://voice2action.netlify.app) |
+| 🌐 **СТАТИЧЕСКИЙ САЙТ** | ✅ Готов | [voice2action.netlify.app](https://voice2action.netlify.app/) |
 | 🔌 **FASTAPI BACKEND** | ✅ Живой 24/7 | [voice2action-backend.onrender.com](https://voice2action-api-vq9x.onrender.com) |
-| 🤖 **TELEGRAM BOT** | 🔄 Деплой (последний шаг) | [@voice2action_bot](t.me/voice2action_bot) |
+| 🤖 **TELEGRAM BOT** | 🔄 Деплой (последний шаг) | [@voice2action_bot](t.me/voice2action_bot/) |
 | 🧠 **YANDEX SPEECHKIT** | ✅ Транскрипция ru-RU | Работает |
 | 🧠 **YANDEXGPT** | ✅ Анализ (5 сценариев) | Авто/Встреча/Продажи/Интервью/Лекция |
 | 📝 **GOOGLE DOCS/SHEETS** | ✅ Автоэкспорт | Создаёт документы | 
@@ -103,7 +103,7 @@ text
 
 | Сервис | Статус | Детали |
 |--------|--------|--------|
-| ✅ **Сайт** | 🟢 Живой | [voice2action.netlify.app](https://voice2action.netlify.app) |
+| ✅ **Сайт** | 🟢 Живой | [voice2action.netlify.app](https://voice2action.netlify.app/) |
 | ✅ **Backend** | 🟢 Живой 24/7 | https://voice2action-api-vq9x.onrender.com/docs |
 | 🔄 **Telegram Bot** | 🟡 Последний шаг | requirements.txt → git push |
 
@@ -126,4 +126,4 @@ text
 ✅ **3 канала**: Сайт / Telegram / API (Swagger)  
 ✅ **Масштаб**: 100% автоматизировано, 24/7, бесплатно 🚀  
 
-**👉 [Демо сайта](https://voice2action.netlify.app) | [Backend Docs](https://voice2action-api-vq9x.onrender.com/docs) | [@voice2action_bot](t.me/voice2action_bot)** 
+**👉 [Демо сайта](https://voice2action.netlify.app/) | [Backend Docs](https://voice2action-api-vq9x.onrender.com/docs) | [@voice2action_bot](https://t.me/voice2action_bot/)** 
