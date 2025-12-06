@@ -1,197 +1,302 @@
-# Voice2Action Constitution
+
+```markdown
+# Voice2Action Constitution (v2.0)
 
 ## Core Principles
 
-### I. AI-First Architecture
-Voice2Action is an AI-powered platform focused on analyzing large audio files (up to 4 hours) from meetings, calls, or discussions. It performs transcription, analytics, summarization, and automated output generation:
-- **OpenAI Whisper** for speech-to-text transcription (model: `whisper-1`, with chunking for large files to handle >30 minutes)
-- **GPT-4o** for advanced content analysis, summarization (multi-level: brief, detailed, with quotes), task extraction, and style analysis (e.g., sales call feedback)
-- AI responses must be structured (JSON for outputs) and actionable, with user-configurable prompts for customization
-- Fallback mechanisms required for API failures (e.g., retry with exponential backoff, local caching for partial transcripts)
-- All AI interactions must be logged for debugging, quality assurance, and usage analytics (e.g., processing time, token consumption)
-- Support for user-selected analysis modes: meeting summary, task extraction, sales analytics, or custom
+### I. AI-First Architecture (Yandex Cloud)
+Voice2Action — платформа для анализа аудио-встреч с автоматическим созданием структурированных документов и задач.  
+Основные функции:
+- Yandex SpeechKit STT для транскрипции (ru-RU, поддержка OGG/MP3 до 25 MB).
+- YandexGPT (yandexgpt-lite) для анализа: резюме, задачи (JSON), ключевые моменты, решения.
+- Структурированный JSON-вывод с полями: `summary`, `tasks[]`, `key_points[]`, `decisions[]`.
+- Сквозной пайплайн: аудио → транскрипт → анализ → Google Docs/Sheets.
+- Логирование всех этапов с метриками (длина текста, время обработки, статусы job).
 
-### II. Modular & Extensible Design
-System components are independent, composable, and user-configurable to allow selection of tasks and services:
-- **Backend**: Python 3.10+ with type hints (PEP 484), using FastAPI for API endpoints to handle user choices (e.g., select outputs: Excel, Word, Jira)
-- **Telegram Bot**: Standalone module with python-telegram-bot, supporting user selection via commands or inline keyboards (e.g., /analyze [mode] [services])
-- **Frontend**: Pure HTML/CSS/JS (no frameworks), fully responsive, mirroring bot functionality (upload audio, select task/service, view results)
-- **Integrations**: Plugin-based architecture for Jira, Confluence, Google Docs/Sheets/Drive, Notion, with user-selected combinations
-- Each module must be testable in isolation
-- Clear interfaces between components (REST API for backend-frontend, message queues for async processing of large audio)
-- User flow: Upload audio → Choose analysis task (transcription, summary, tasks) → Choose outputs (Excel tables, Word docs, Jira tickets) → AI processes and generates
+### II. Current Architecture & Tech Stack
 
-### III. Security & Privacy by Default (NON-NEGOTIABLE)
-User data protection is paramount, especially for 1-10 initial users with large audio files:
-- **Environment variables**: All secrets in `.env` files (never committed)
-- **API keys**: Rotated regularly, scoped to minimum permissions
-- **.gitignore**: Must exclude `.env`, `*.log`, `temp_*`, API credentials, user audio files
-- **Data retention**: Audio files deleted after processing (max 24h temp storage); generated outputs stored for 7 days with auto-cleanup
-- **Encryption**: HTTPS/TLS for all API communications; encrypt stored audio (e.g., via AES if needed)
-- **OAuth 2.0**: For third-party integrations (Jira, Google, Notion); users provide their own OAuth tokens/links for personal accounts
-- **File handling**: All files created/stored on our side (Google Drive/Supabase); users can provide template links for customization, but AI fills automatically
-- **User consent**: Explicit agreement for audio processing; anonymize sensitive data (e.g., PII detection)
+```
+FastAPI (REST API + Swagger UI) → SQLite (voice2action.db) → Yandex Cloud → Google Workspace
+│
+├── services/
+│   ├── yandex_stt.py      (SpeechKit транскрибация)
+│   ├── yandex_gpt.py      (YandexGPT анализ транскрипта)
+│   └── gdocs_service.py   (создание Google Docs/Sheets)
+├── database.py            (обёртка над SQLite jobs)
+└── main.py                (FastAPI, пайплайн, эндпоинты)
+```
 
-### IV. Test-Driven Quality
-Testing ensures reliability and prevents regressions for small-scale (1-10 users) deployment:
-- **Framework**: pytest with coverage ≥80%
-- **Test types**: Unit tests (mocked AI), integration tests (real APIs in staging, including large audio chunks), E2E (bot/site workflows with simulated user choices)
-- **Pre-commit**: Tests must pass before merge
-- **CI/CD**: Automated testing on GitHub Actions, including load tests for 10 concurrent users
-- **Mocking**: Use `responses` library for external API mocking (e.g., Jira creation, Google Drive uploads)
+Ключевые возможности:
+- Загрузка аудио: `POST /api/process-audio`.
+- Статус задач: `GET /api/status/{job_id}`, `GET /api/jobs/{job_id}`.
+- Результаты:
+  - Транскрипт: `GET /api/jobs/{job_id}/transcript`.
+  - Анализ: `GET /api/jobs/{job_id}/analysis`.
+- Авто-экспорт:
+  - Google Docs — резюме встречи + ключевые пункты + полный транскрипт.
+  - Google Sheets — таблица задач (описание, дедлайн, ответственный, приоритет).
 
-### V. Documentation & Code Clarity
-Code must be self-explanatory and well-documented:
-- **README.md**: Setup instructions, architecture diagrams (Mermaid for flows), API examples, user guide for selecting tasks/services
-- **Docstrings**: Google-style docstrings for all functions/classes
-- **Type hints**: Mandatory for function signatures
-- **Comments**: Explain "why", not "what" (code explains "what")
-- **Changelog**: Track breaking changes in CHANGELOG.md
-- **User docs**: Inline help for bot/site (e.g., how to choose tasks/outputs)
+### III. Security & Privacy (Non-Negotiable)
+
+- Yandex:
+  - Используется сервисный аккаунт (роль: admin/editor на каталоге).
+  - API-ключ с правами: `yc.ai.speechkitStt.execute`, `yc.ai.languageModels.execute`, `yc.ai.foundationModels.execute`, и др.
+- Google:
+  - Авторизация через Service Account JSON в переменной окружения `GOOGLE_SERVICE_ACCOUNT_JSON`.
+- Переменные окружения:
+  - `YANDEX_API_KEY`, `YANDEX_FOLDER_ID`, `GOOGLE_SERVICE_ACCOUNT_JSON` хранятся только в `.env` и в переменных окружения, не коммитятся.
+- Файлы:
+  - Временные аудио-файлы сохраняются в системный temp и удаляются после обработки.
+  - База `voice2action.db` используется локально для разработки.
+- .gitignore:
+  - Обязательно исключает `.env`, `*.log`, временные файлы, базу данных и кэши.
+- Все внешние запросы (в проде) должны идти по HTTPS/TLS.
+
+### IV. User Flow
+
+```
+1. Клиент делает POST /api/process-audio с файлом.
+2. Сервер создаёт job_id, сохраняет файл, запускает асинхронный пайплайн.
+3. Yandex SpeechKit → транскрипция → сохранение в БД и in-memory.
+4. YandexGPT → анализ транскрипта → JSON (summary, tasks, key_points, decisions).
+5. GoogleDocsService → создаёт Google Doc и, при наличии задач, Google Sheet.
+6. Клиент опрашивает /api/status/{job_id} и /api/jobs/{job_id} для получения результата.
+7. Временный файл удаляется.
+```
 
 ## Technical Standards
 
-### Backend (Python)
-- **Version**: Python 3.10+ (for modern type hints and async)
-- **Dependencies**: Managed via `requirements.txt` with pinned versions (e.g., fastapi, uvicorn, openai, google-api-python-client, atlassian-python-api, notion-client, openpyxl)
-- **Code style**: PEP 8 (black formatter, flake8 linter)
-- **Async**: Use `asyncio` for I/O-bound operations (audio processing, API calls)
-- **Error handling**: Explicit try-except blocks, log all errors, user-friendly messages
-- **Logging**: Structured logging with `logging` module (INFO, WARNING, ERROR); include user_id for 1-10 users
+### Backend (Python 3.10+)
 
-### Frontend (Website)
-- **Stack**: Pure HTML5, CSS3, vanilla JavaScript (ES6+), with forms for audio upload, task/service selection (checkboxes/dropdowns)
-- **Responsive**: Mobile-first design, tested on iOS/Android; same functionality as bot (upload + process)
-- **Performance**: <3s load time, lazy-load images; chunked uploads for large audio
-- **Accessibility**: WCAG 2.1 AA compliance (alt text, ARIA labels)
-- **Browser support**: Chrome, Firefox, Safari, Edge (last 2 versions)
-- **No frameworks**: Keep it simple and fast; JS for async processing (fetch to backend)
+- FastAPI + Uvicorn (API, Swagger `/docs`).
+- SQLite (таблица `jobs`: id, filename, status, created_at, completed_at, transcript, analysis, extracted_tasks).
+- Асинхронный пайплайн (`asyncio.create_task`, `async def` для STT/GPT).
+- Структурированное логирование (`logging` с указанием job_id и этапа).
+- Pydantic-модели для запросов/ответов (`ExportRequest`, `JobStatus` и др.).
+- Включён CORS для всех origins (для будущего фронтенда/бота).
 
-### Telegram Bot
-- **Library**: python-telegram-bot v20.7
-- **Handlers**: Command handlers (`/start`, `/analyze`), message handlers (voice/audio); inline keyboards for task/service selection
-- **Error recovery**: Graceful degradation on AI/API failures
-- **Rate limiting**: Max 10 requests/minute per user (for 1-10 users)
-- **Uptime**: 99.5% target (monitored via UptimeRobot)
+### Yandex Cloud Integration
 
-### Integrations
-- **Jira**: REST API v3, OAuth 2.0 (user provides token if personal; simulate for testing since no real Jira yet)
-- **Confluence**: REST API, create pages in designated spaces (user provides space key)
-- **Google Docs/Sheets/Drive**: Google Drive API v3 for real creation/filling (OAuth, auto-generate Docs for summaries, Sheets for tables; share links)
-- **Notion**: Official API, create database entries/pages (user provides database ID)
-- **Excel/Word**: Generate via `openpyxl` (Excel tables), `python-docx` (Word protocols); upload to Drive and share
-- **File creation**: AI creates/fills all files automatically on our side; users can provide template links for customization (e.g., "use my Excel template")
+- SpeechKit:
+  - Endpoint: `https://stt.api.cloud.yandex.net/speech/v1/stt:recognize`.
+  - Параметры: `folderId`, `lang=ru-RU`, бинарное аудио.
+- YandexGPT:
+  - Endpoint: `https://llm.api.cloud.yandex.net/foundationModels/v1/completion`.
+  - Модель: `gpt://{FOLDER_ID}/yandexgpt-lite`.
+  - Формат сообщений: system + user, JSON-ориентированный промпт.
+  - Результат парсится в JSON; при ошибке парсинга — fallback: summary = текст ответа, пустые lists.
+
+### Google Workspace
+
+- Google Docs API v1:
+  - Создание документа, вставка текста через `batchUpdate`.
+  - Права доступа: `anyone` с ролью `reader`.
+- Google Sheets API v4:
+  - Создание таблицы с листом `Задачи`.
+  - Заголовки: `Задача`, `Дедлайн`, `Ответственный`, `Приоритет`.
+  - Запись массива задач через `values().update`.
+- Google Drive API v3:
+  - Настройка публичных прав (`permissions().create`).
+
+## API Endpoints
+
+| Endpoint                      | Method | Description                              |
+|------------------------------|--------|------------------------------------------|
+| `/`                          | GET    | Простой статус API + ссылка на `/docs`. |
+| `/health`                    | GET    | Состояние БД, Yandex ключей, GoogleDocs.|
+| `/api/process-audio`         | POST   | Загрузка аудио и запуск обработки.       |
+| `/api/status/{job_id}`       | GET    | Текущий статус в in-memory.              |
+| `/api/jobs`                  | GET    | Список задач из БД.                      |
+| `/api/jobs/{job_id}`         | GET    | Полная инфа: транскрипт + анализ.        |
+| `/api/jobs/{job_id}/transcript` | GET | Только транскрипт.                       |
+| `/api/jobs/{job_id}/analysis`   | GET | Только анализ.                           |
+| `/api/search`                | GET    | Поиск по транскриптам в БД.              |
+| `/api/export`                | POST   | Экспорт результатов (Docs/Sheets и др.).|
 
 ## Development Workflow
 
 ### Git Strategy
-- **Branching**: `main` (production), `dev` (staging), feature branches (`feature/task-name`)
-- **Commits**: Conventional Commits format (`feat:`, `fix:`, `docs:`, `test:`)
-- **Pull Requests**: Required for `main`, at least 1 approval
-- **Tagging**: Semantic versioning (v1.0.0, v1.1.0, etc.)
 
-### Deployment
-- **Backend/Bot**: Render.com (free tier, always-on worker for 1-10 users)
-- **Website**: GitHub Pages (static hosting)
-- **Storage**: Google Drive for files (auto-creation/sharing), Supabase for user metadata (choices, logs)
-- **Staging**: Separate environment for testing integrations
-- **Rollback**: Keep last 3 versions deployable
+- Ветки:
+  - `main` — рабочая/стабильная ветка.
+  - `feature/*` — изолированные фичи/эксперименты.
+- Commits:
+  - Формат Conventional Commits: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`.
+- Версионирование:
+  - Semantic Versioning (например, `v2.0.0`).
 
-### Monitoring & Observability
-- **Logs**: Centralized logging (stdout → Render logs); track user selections and processing
-- **Metrics**: Track processing time, API call counts, error rates (for large audio)
-- **Alerts**: Notify on bot downtime or API quota exceeded
-- **User feedback**: `/feedback` command in bot for bug reports; site form
+### Local Development
 
-## Project-Specific Rules
+```
+# 1. Клонировать репозиторий
+git clone <repo-url>
+cd voice2action-site/backend
 
-### Audio Processing Pipeline
-1. **Input**: Voice message, audio file (MP3, OGG, M4A, up to 4 hours); chunking for large files
-2. **Transcription**: Whisper API (parallel chunks for speed)
-3. **Analysis**: GPT-4o prompt engineering for:
-   - Summary generation (multi-level)
-   - Task extraction (format: `- Задача: [Description] [Deadline] [Assignee]`)
-   - Table filling (Excel: rows for tasks/calls)
-   - Document generation (Word: formatted protocol with sections)
-   - Sales call analysis (optional module)
-4. **Output**: Structured JSON + files; auto-create in selected services
-5. **Cleanup**: Delete temp audio files immediately after processing; outputs stored 7 days
+# 2. Настроить .env
+cp .env.example .env
+# Заполнить:
+# YANDEX_API_KEY=...
+# YANDEX_FOLDER_ID=...
+# GOOGLE_SERVICE_ACCOUNT_JSON=... (одной строкой)
 
-### Telegram Bot Commands
-- `/start`: Welcome + quick start guide
-- `/analyze`: Start analysis with inline selection (task + services)
-- `/help`: Feature list + examples
-- `/feedback [text]`: Send feedback
-- Voice/Audio: Automatic prompt for selection → processing
+# 3. Установить зависимости
+pip install -r requirements.txt
 
-### Website Content Strategy
-- **Landing page**: Hero section, benefits, how it works (upload + select), testimonials
-- **Features page**: Detailed (transcription, summary, integrations); demo with selection
-- **Pricing page**: Free (1-10 users), Team, Business (990₽, 3990₽)
-- **Contact page**: Form + team contacts
-- **Core**: Mirror bot — upload audio, select task/service, get results (async via backend)
+# 4. Запустить сервер
+python main.py
+# Swagger: http://localhost:8000/docs
+# Health:  http://localhost:8000/health
+```
 
-### Error Handling Protocol
-- **Graceful failures**: Never crash, always return user-friendly error
-- **Retry logic**: 3 retries for API calls (exponential backoff)
-- **User notifications**: "Обработка заняла больше времени, попробуйте позже"
-- **Logging**: ERROR level for failures, include user_id and timestamp
+### Testing
+
+Простейшие ручные тесты:
+
+```
+# Загрузка тестового аудио
+curl -X POST "http://localhost:8000/api/process-audio" \
+  -F "audio=@test.ogg"
+
+# Проверка job
+curl "http://localhost:8000/api/status/<JOB_ID>"
+curl "http://localhost:8000/api/jobs/<JOB_ID>"
+```
+
+Авто-тесты (цель):
+
+- `pytest` для юнит-тестов сервисов:
+  - Моки для Yandex STT/GPT и Google API.
+- Покрытие:
+  - Цель ≥ 80% по основным модулям (`services/`, `main.py`).
+
+## Roadmap
+
+### Phase 1: Core (Сделано / В процессе)
+
+- Yandex SpeechKit интеграция (STT).
+- YandexGPT анализ транскрипта в структурированный JSON.
+- FastAPI backend с эндпоинтами статуса и результатов.
+- Google Docs/Sheets экспорт.
+- SQLite хранилище задач.
+
+### Phase 2: UX & Integrations
+
+- Telegram-бот:
+  - Команды для загрузки голосовых/файлов.
+  - Получение ссылок на Docs/Sheets.
+- Веб-интерфейс:
+  - Простая страница на HTML/JS для загрузки аудио и просмотра статусов.
+- Расширенный анализ:
+  - Распознавание эмоций, тем, приоритетов, дедлайнов.
+- Ручной экспорт/повторный экспорт через `/api/export`.
+
+### Phase 3: Scale & Pro
+
+- Очереди (Redis/RabbitMQ) для длинной обработки.
+- Интеграции: Jira, Confluence, Notion.
+- Мультиязычность и кастомные промпты анализа.
+- Авто-деплой (Render / Yandex Cloud Functions / Cloud Run).
 
 ## Quality Gates
 
-### Before Merge (PR Checklist)
-- [ ] All tests pass (`pytest -v`)
-- [ ] Coverage ≥80% (`pytest --cov`)
-- [ ] Code formatted (`black .`)
-- [ ] Linter clean (`flake8 .`)
-- [ ] No secrets in code (checked via `git-secrets`)
-- [ ] Documentation updated (if API changed)
+### Before Commit
 
-### Before Deploy
-- [ ] Integration tests pass in staging (large audio, selections)
-- [ ] Bot responds to `/start` within 2 seconds
-- [ ] Website loads in <3 seconds
-- [ ] All external APIs reachable (Jira sim, Google, Notion)
-- [ ] Error tracking enabled (Sentry or similar)
+- Сервер запускается:
+  - `python main.py` без ошибок.
+- Базовые эндпоинты живы:
+  - `/health` возвращает `status: healthy` (на локальной конфигурации).
+  - `/docs` открывается.
+- Логи читаемы:
+  - Есть job_id, статусы этапов, ошибки.
+
+### Before Feature Complete
+
+- Ручной тест с реальным `.ogg`/`.mp3`:
+  - Транскрипция не пустая.
+  - Анализ возвращает `summary` и, по возможности, `tasks`.
+- Документы:
+  - Google Doc создаётся.
+  - Google Sheet создаётся при наличии задач.
+- БД:
+  - Запись job появляется в `voice2action.db`, данные корректны.
+
+## 🛡️ Security & Compliance
+
+### .gitignore (обязательно)
+
+```
+.env
+*.log
+temp_*
+voice2action.db
+__pycache__/
+.pytest_cache/
+*.pyc
+```
+
+### Error Recovery & Resilience
+
+- Вызовы внешних API (Yandex, Google):
+  - До 3 попыток (retry) с экспоненциальной задержкой (план).
+- Fallback:
+  - При ошибке YandexGPT:
+    - Сохранять транскрипт.
+    - Возвращать текст ответа как `summary` и пустые списки.
+- Поведение API:
+  - Никогда не падать без JSON-ответа; возвращать HTTP 4xx/5xx с описанием ошибки.
+  - Логировать stack trace для разработчика, но не раскрывать чувствительные детали в ответе пользователю.
+
+### Testing Standards
+
+Плановый стандарт:
+
+```
+pytest -v --cov=services --cov=main --cov-report=html
+# Цель: ≥ 80% покрытие по ключевым модулям
+```
+
+- Для внешних сервисов использовать моки:
+  - SpeechKit, YandexGPT, Google Docs/Sheets/Drive.
 
 ## Governance
 
-### Constitution Authority
-This constitution supersedes all other development practices. Changes require:
-1. Documented proposal with rationale
-2. Team review and approval
-3. Migration plan for existing code
-
-### Amendment Process
-- **Proposal**: Open GitHub Issue with `constitution-amendment` label
-- **Review**: Minimum 48-hour discussion period
-- **Approval**: Majority vote from core team
-- **Implementation**: Update this document + CHANGELOG.md
-
-### Compliance
-- All code reviews must verify constitution compliance
-- Violations require justification or refactoring
-- Regular audits (monthly) to ensure adherence
+- Эта конституция — основной документ по архитектуре и процессам Voice2Action.
+- Изменения в конституции:
+  1. Создать Issue с пометкой `constitution-update`.
+  2. Кратко описать мотивы и последствия.
+  3. Обсудить и утвердить (для соло-проекта — осознанное решение + запись в CHANGELOG).
+- При существенных изменениях:
+  - Обновлять версию (например, `v2.1.0`).
+  - Обновлять `README.md` и архитектурные заметки.
 
 ---
+II. Current Architecture & Tech Stack (дополнение)
+text
+- Telegram Bot: существует базовый бот на python-telegram-bot (v20.7) для загрузки аудио и базового управления.
+- Веб-интерфейс: адаптивный сайт на HTML/CSS/JS (без фреймворков), с функционалом загрузки аудио и просмотра статусов.
+- Планируется эволюция и доработка обоих для полного пользовательского цикла.
+III. Integrations (дополнение/план)
+text
+- Текущие интеграции: Google Docs/Sheets.
+- Планируются интеграции с Jira, Confluence, Notion (API, OAuth 2.0):
+  - Создание задач в Jira
+  - Создание страниц в Confluence
+  - Синхронизация с базами данных в Notion
+- Интеграционная архитектура построена на плагинах, должна позволять включать/отключать сервисы пользователем.
+Roadmap (дополнение)
+text
+Phase 2: До июня 2026
+- Развитие Telegram-бота:
+  - Разграничение команд, inline клавиатуры, голосовые сообщения.
+- Веб-сайт:
+  - Улучшение UI/UX, статус обработки, отображение результатов.
+- Интеграции:
+  - Jira, Confluence, Notion — первичная реализация.
 
-**Version**: 1.1.0  
-**Ratified**: 2025-11-02  
-**Last Amended**: 2025-11-02  
-**Next Review**: 2025-12-02
 
----
+**Version:** 2.0.0  
+**Ratified:** 2025-12-03  
+**Scope:** Yandex Cloud + Google Workspace + FastAPI backend  
+**Next Review:** 2026-01-03
+```
 
-## Quick Reference
-
-| Aspect | Standard |
-|--------|----------|
-| **Language** | Python 3.10+ |
-| **AI Models** | Whisper-1, GPT-4o |
-| **Testing** | pytest, ≥80% coverage |
-| **Security** | .env files, OAuth 2.0, 7-day cleanup |
-| **Deployment** | Render.com (backend/bot), GitHub Pages (site), Supabase (DB) |
-| **Documentation** | Docstrings, README, CHANGELOG, user guide |
-| **Code Style** | PEP 8, black, flake8 |
-| **Bot Uptime** | 99.5% target |
-| **Users** | Optimized for 1-10 (scalable) |

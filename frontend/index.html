@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice2Action – AI превращает голос в действия</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <div class="container header">
+      <span class="logo-text">Voice2<span class="ai-accent">Action</span></span>
+      <nav>
+        <a href="index.html" class="active">Главная</a>
+        <a href="features.html">Функции</a>
+        <a href="app.html">Попробовать</a>
+        <a href="pricing.html">Тарифы</a>
+        <a href="contact.html">Контакты</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero hero-xxl">
+    <div class="container">
+      <h1>🎙 Превращай голос в задачи за 2 минуты</h1>
+      <p class="subtitle">
+        Voice2Action — платформа для анализа аудио-встреч с автоматическим созданием структурированных документов и задач.
+        <br>
+        <span class="tag">
+          Аудио → транскрипт на Yandex SpeechKit → анализ YandexGPT → готовые summary, задачи и ключевые решения в Google Docs/Sheets.
+        </span>
+      </p>
+      <a href="app.html" class="btn primary-btn">🚀 Попробовать сейчас</a>
+      <a href="http://localhost:8000/docs" target="_blank" class="btn secondary">📋 API Документация</a>
+    </div>
+  </section>
+
+  <section class="benefits big-benefits">
+    <div class="container">
+      <h2>Почему выбирают Voice2Action?</h2>
+      <div class="benefits-list">
+        <div class="benefit">
+          <h3>–20% времени на рутину после встреч</h3>
+          <p>Аудио ложится в структурированный JSON: <code>summary</code>, <code>tasks[]</code>, <code>key_points[]</code>, <code>decisions[]</code> — без ручного протоколирования.</p>
+        </div>
+        <div class="benefit">
+          <h3>Готово к интеграции</h3>
+          <p>Сквозной пайплайн аудио → транскрипт → анализ → Google Docs/Sheets, Jira, Notion и внутренние системы через API.</p>
+        </div>
+        <div class="benefit">
+          <h3>AI‑first архитектура</h3>
+          <p>Ядро на Yandex SpeechKit и YandexGPT (yandexgpt-lite), модульный backend с логированием времени обработки и статусов job.</p>
+        </div>
+        <div class="benefit">
+          <h3>Прозрачность и контроль</h3>
+          <p>Каждый шаг — от загрузки файла до готового документа — логируется, что даёт предсказуемость SLA и качество анализа.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="how-works styled-icon-steps">
+    <div class="container">
+      <h2>Как работает Voice2Action?</h2>
+      <div class="icon-steps">
+        <div class="step">
+          <div class="icon-circle">1</div>
+          <h4>Загрузите аудиозапись</h4>
+          <p>Запись встречи из Zoom, Telegram, Google Meet или локальный файл (OGG/MP3 до 25 МБ).</p>
+        </div>
+        <div class="step">
+          <div class="icon-circle">2</div>
+          <h4>Транскрипция и анализ на Yandex Cloud</h4>
+          <p>Yandex SpeechKit превращает речь в текст, а YandexGPT формирует резюме, задачи, ключевые точки и принятые решения.</p>
+        </div>
+        <div class="step">
+          <div class="icon-circle">3</div>
+          <h4>Структурированный результат и экспорт</h4>
+          <p>Вы получаете JSON c полями <code>summary</code>, <code>tasks[]</code>, <code>key_points[]</code>, <code>decisions[]</code> и выгружаете его в Google Docs/Sheets или систему задач.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="audience xxl-audience">
+    <div class="container">
+      <h2>Кому подходит Voice2Action?</h2>
+      <div class="audience-list">
+        <div class="audience-item">
+          <strong>IT-команды, Project Office</strong><br>Протоколы, задачи и контроль — без ручного ввода.
+        </div>
+        <div class="audience-item">
+          <strong>Продажи &amp; Колл-центры</strong><br>Скрипты, анализ коммуникации, улучшение качества.</div>
+        <div class="audience-item">
+          <strong>Маркетинг &amp; аналитика</strong><br>Брифы, идеи, инсайты, экспорт в таблицы.
+        </div>
+        <div class="audience-item">
+          <strong>Руководители/HR</strong><br>Сводки, фидбек по встречам и развитие корпоративной культуры.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="trust proof">
+    <div class="container">
+      <h2>Нам уже доверяют</h2>
+      <div class="proof-row">
+        <div class="proof-col">
+          <blockquote>«Перестали забывать договорённости. Протоколы приходят автоматически — это экономит ~3 часа в неделю!»<br><span class="proof-user">— Ольга, IT Project</span></blockquote>
+        </div>
+        <div class="proof-col">
+          <blockquote>«В Telegram-боте получили summary звонка за минуту… Теперь весь отдел анализирует общение и растет!»<br><span class="proof-user">— Алексей, Руководитель продаж</span></blockquote>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tech">
+    <div class="container">
+      <h2>AI‑архитектура на Yandex Cloud</h2>
+      <div class="tech-list">
+        <div class="tech-item">
+          <strong>Yandex SpeechKit STT</strong>: точная транскрипция переговоров (ru‑RU, поддержка OGG/MP3 до 25 МБ).
+        </div>
+        <div class="tech-item">
+          <strong>YandexGPT (yandexgpt-lite)</strong>: резюме встречи, JSON‑список задач, ключевые моменты и принятые решения.
+        </div>
+        <div class="tech-item">
+          <strong>Структурированный JSON‑вывод</strong>: поля <code>summary</code>, <code>tasks[]</code>, <code>key_points[]</code>, <code>decisions[]</code> — готово к интеграции.
+        </div>
+        <div class="tech-item">
+          <strong>Сквозной пайплайн</strong>: от аудио до Google Docs/Sheets с логированием длительности, статусов и метрик обработки.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-section" style="text-align:center; padding:60px 20px;">
+    <div class="container">
+      <h2>Готов превращать голос в структурированные действия?</h2>
+      <p>Загрузите первую аудиозапись и получите резюме, задачи и ключевые решения за пару минут.</p>
+      <a href="app.html" class="btn primary-btn large-btn">
+        🎙 Попробовать Voice2Action
+      </a>
+      <p style="margin-top:16px; font-size:0.9em; opacity:0.85;">
+        Или откройте <a href="http://localhost:8000/docs" target="_blank">Swagger UI</a>, чтобы интегрировать платформу через API.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container footer">
+      <p>&copy; 2025 Voice2Action. AI для бизнеса | <a href="contact.html">Контакты</a></p>
+    </div>
+  </footer>
+  <script src="js/main.js"></script>
+</body>
+</html>
+

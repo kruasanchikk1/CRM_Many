@@ -1,14 +1,14 @@
-# Voice2Action - Инструкция по установке и запуску
-
+```markdown
+# Voice2Action - Инструкция по установке и запуску 
 ## 📋 Требования
 
-- Python 3.10+
+- **Python 3.13** (актуально для Render)
 - pip
 - Аккаунты:
-  - OpenAI API
-  - Telegram Bot Token
-  - Jira Cloud (опционально)
-  - Google Cloud (для Docs API, опционально)
+  - **Yandex SpeechKit** (заменил OpenAI)
+  - **Telegram Bot Token**
+  - **Google Cloud** (Docs/Sheets API)
+  - **YandexGPT API**
 
 ---
 
@@ -16,9 +16,9 @@
 
 ### 1. Установка зависимостей
 
-```bash
+```
 # Клонировать репозиторий
-git clone https://github.com/yourusername/voice2action.git
+git clone https://github.com/kruasanchikk1/CRM_Many/tree/master
 cd voice2action
 
 # Создать виртуальное окружение
@@ -35,23 +35,19 @@ pip install -r requirements.txt
 
 Скопируй `.env.example` в `.env`:
 
-```bash
+```
 cp .env.example .env
 ```
 
 Заполни переменные в `.env`:
 
-```bash
+```
 # Обязательные
 TELEGRAM_TOKEN=твой_telegram_bot_token
-OPENAI_API_KEY=sk-proj-твой_ключ
+YANDEX_SPEECHKIT_API_KEY=твой_speechkit_ключ
+YANDEXGPT_API_KEY=твой_yandexgpt_ключ
 
-# Опциональные (для полного функционала)
-JIRA_URL=https://your-company.atlassian.net
-JIRA_EMAIL=bot@company.com
-JIRA_API_TOKEN=твой_jira_токен
-JIRA_PROJECT_KEY=V2A
-
+# Google Docs
 GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
 GOOGLE_DOCS_FOLDER_ID=id_папки_в_drive
 ```
@@ -62,272 +58,157 @@ GOOGLE_DOCS_FOLDER_ID=id_папки_в_drive
 1. Найди @BotFather в Telegram
 2. Отправь `/newbot`
 3. Следуй инструкциям
-4. Скопируй токен
+4. Скопируй токен → @voice2action_bot
 
-#### OpenAI API Key
-1. Зайди на https://platform.openai.com/api-keys
-2. Создай новый API ключ
-3. Скопируй (сохрани, он покажется только раз!)
+#### Yandex SpeechKit
+1. https://cloud.yandex.ru/services/speechkit
+2. Создай API ключ
+3. Выбери ru-RU модель
 
-#### Jira API Token (опционально)
-1. Зайди на https://id.atlassian.com/manage-profile/security/api-tokens
-2. Create API token
-3. Скопируй токен
+#### YandexGPT
+1. https://cloud.yandex.ru/services/yandexgpt
+2. Создай API ключ
 
-#### Google Service Account (опционально)
-1. Зайди на https://console.cloud.google.com
-2. Создай проект
-3. Включи Google Docs API и Google Drive API
-4. Создай Service Account
-5. Скачай JSON ключ как `service-account.json`
-6. Создай папку в Google Drive и дай доступ Service Account
+#### Google Service Account
+1. https://console.cloud.google.com
+2. Создай проект → включи Docs/Drive API
+3. Service Account → скачай `service-account.json`
+4. Создай папку в Drive → дай доступ Service Account [file:2]
 
 ### 4. Запуск Backend (FastAPI)
 
-```bash
+```
 # В одном терминале
 python -m uvicorn backend.main:app --reload --port 8000
 ```
 
-Проверь: http://localhost:8000 → должно показать `{"message": "Voice2Action API v1.0"}`
+✅ Проверь: https://voice2action-backend.onrender.com/docs [file:2]
 
 ### 5. Запуск Telegram Bot
 
-```bash
+```
 # В другом терминале
-python telegram-bot/bot_v2.py
+python telegram-bot/bot.py
 ```
 
-Проверь: отправь `/start` боту в Telegram
+🔄 **Последний шаг**: requirements.txt фикс → git push [file:2]
 
 ### 6. Открой сайт
 
-```bash
+```
 # Просто открой в браузере
 open index.html  # Mac
 start index.html  # Windows
 xdg-open index.html  # Linux
 ```
 
-Для загрузки аудио открой `app.html`
+🌐 **Живой**: https://voice2action.netlify.app [file:2]
 
 ---
 
-## 🌐 Деплой на Render.com
+## 🌐 Деплой на Render.com (АКТУАЛЬНО)
 
 ### 1. Подготовка
+- Аккаунт: https://render.com
+- GitHub репозиторий
+- Free tier ($0/мес)
 
-Убедись что у тебя есть:
-- Аккаунт на https://render.com
-- GitHub репозиторий с проектом
-- Все переменные окружения готовы
+### 2. Backend (уже живой)
+✅ **https://voice2action-api-vq9x.onrender.com**
+- FastAPI + Python 3.13
+- Yandex SpeechKit + YandexGPT
+- Google Docs API
 
-### 2. Подключение репозитория
-
-1. Зайди на https://dashboard.render.com
-2. New → Blueprint
-3. Выбери свой GitHub репозиторий
-4. Render автоматически обнаружит `render.yaml`
-
-### 3. Настройка переменных окружения
-
-В дашборде Render для каждого сервиса:
-
-**voice2action-api**:
-- OPENAI_API_KEY
-- JIRA_URL, JIRA_EMAIL, JIRA_API_TOKEN (если используешь)
-- GOOGLE_APPLICATION_CREDENTIALS (скопируй содержимое JSON)
-
-**voice2action-bot**:
-- TELEGRAM_TOKEN
-- OPENAI_API_KEY
-- (остальные по необходимости)
-
-### 4. Деплой
-
-Render автоматически задеплоит при пуше в `main`:
-
-```bash
-git add .
-git commit -m "Deploy to Render"
-git push origin main
+### 3. Telegram Bot (последний шаг)
+```
+🔄 voice2action-bot.onrender.com
+1. requirements.txt → pip install python-telegram-bot==21.7
+2. git add . && git commit -m "Fix bot deps"
+3. git push origin main
+4. Render auto-deploy!
 ```
 
-### 5. Проверка
+### 4. Проверка
+- ✅ API: https://voice2action-api-vq9x.onrender.com/docs
+- 🔄 Bot: @voice2action_bot → `/start`
+- ✅ Сайт: voice2action.netlify.app [file:2]
 
-- API: https://voice2action-api.onrender.com
-- Бот: отправь `/start` в Telegram
-- Сайт: задеплой на GitHub Pages или Netlify
+---
+
+## 🎯 ИТОГ ДЕПЛОЯ (06.12.2025)
+
+| Сервис | Статус | URL |
+|--------|--------|-----|
+| 🌐 **Сайт** | ✅ Живой | voice2action.netlify.app |
+| 🔌 **Backend** | ✅ Живой 24/7 | voice2action-backend.onrender.com |
+| 🤖 **Telegram Bot** | 🔄 Последний шаг | @voice2action_bot |
+| 🧠 **Yandex SpeechKit** | ✅ ru-RU | Работает |
+| 🧠 **YandexGPT** | ✅ 5 сценариев | Авто/Встреча/Продажи/Интервью/Лекция |
+| 📝 **Google Docs** | ✅ Экспорт | Создаёт документы | [file:2]
+
+---
+
+## 📊 Технический стек (обновлено)
+
+```
+Frontend: HTML/CSS/JS → Netlify
+Backend: FastAPI → Render (Python 3.13)
+Bot: python-telegram-bot v21.7 → Render
+AI: Yandex SpeechKit + YandexGPT
+Docs: Google Docs/Sheets API
+Бюджет: $0/мес (все Free tier)
+```
 
 ---
 
 ## 🧪 Тестирование
 
-```bash
-# Запуск всех тестов
+```
+# Все тесты
 pytest
 
-# С покрытием
-pytest --cov=backend --cov=telegram-bot
+# Backend API
+curl -X POST "http://localhost:8000/api/process-audio" -F "audio=@test.mp3"
 
-# Только unit тесты
-pytest tests/unit/
-
-# Только интеграционные
-pytest tests/integration/
+# Telegram bot
+python telegram-bot/bot.py
 ```
 
 ---
 
-## 📁 Структура проекта
+## 📁 Структура проекта (актуальная)
 
 ```
 voice2action/
-├── backend/
-│   ├── main.py                # FastAPI приложение
-│   ├── services/
-│   │   ├── transcription.py   # Whisper API
-│   │   ├── analysis.py        # GPT-4o-mini
-│   │   ├── excel_generator.py # Excel экспорт
-│   │   ├── word_generator.py  # Word экспорт
-│   │   ├── jira_service.py    # Jira интеграция
-│   │   └── gdocs_service.py   # Google Docs
-│   └── __init__.py
-│
+├── backend/                 # FastAPI ✅
+│   ├── main.py
+│   └── services/
+│       ├── speechkit.py     # Yandex SpeechKit
+│       ├── yandexgpt.py     # 5 сценариев
+│       └── gdocs_service.py # Google Docs
 ├── telegram-bot/
-│   ├── bot_v2.py              # Telegram бот
-│   └── __init__.py
-│
-├── frontend/
-│   ├── index.html             # Главная страница
-│   ├── app.html               # Форма загрузки
-│   ├── features.html
-│   ├── pricing.html
-│   ├── css/
-│   │   └── style.css
-│   └── js/
-│       └── main.js
-│
-├── tests/
-│   ├── test_transcription.py
-│   ├── test_analysis.py
-│   └── test_integrations.py
-│
-├── requirements.txt           # Python зависимости
-├── render.yaml                # Конфиг для Render.com
-├── .env.example               # Пример переменных
-├── .gitignore
-└── README.md
+│   └── bot.py              # v21.7 🔄
+├── frontend/               # Netlify ✅
+│   ├── index.html
+│   └── app.html (drag&drop)
+├── requirements.txt
+├── render.yaml
+└── .env.example
 ```
 
 ---
 
-## 🔧 Настройка Google Docs API
+## 🎉 ГОТОВЫЙ ПРОДУКТ
 
-1. **Создай Service Account**:
-   - https://console.cloud.google.com
-   - IAM & Admin → Service Accounts → Create Service Account
-   - Скачай JSON ключ
+**3 канала**:
+1. 🌐 **Сайт**: voice2action.netlify.app (drag&drop)
+2. 🤖 **Telegram**: @voice2action_bot (голосовые)
+3. 🔌 **API**: voice2action-backend.onrender.com/docs
 
-2. **Включи API**:
-   - APIs & Services → Library
-   - Найди "Google Docs API" → Enable
-   - Найди "Google Drive API" → Enable
-
-3. **Создай папку в Drive**:
-   - Создай папку для документов
-   - Share → Добавь email Service Account (из JSON) с правами Editor
-   - Скопируй ID папки из URL (строка после `/folders/`)
-
-4. **Настрой переменные**:
-   ```bash
-   GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
-   GOOGLE_DOCS_FOLDER_ID=твой_folder_id
-   ```
-
----
-
-## 🎯 Использование
-
-### Telegram Bot
-
-1. Найди бота: @твой_бот
-2. Отправь `/start`
-3. Отправь голосовое сообщение или аудио файл
-4. Выбери тип анализа (встреча/продажи/интервью)
-5. Выбери форматы экспорта (Excel/Word/Jira/Docs)
-6. Нажми "Готово"
-7. Получи результаты!
-
-### Веб-приложение
-
-1. Открой https://твой-сайт.com/app.html
-2. Перетащи аудио файл или выбери через кнопку
-3. Выбери настройки
-4. Нажми "Начать обработку"
-5. Скачай результаты
-
-### API (для разработчиков)
-
-```python
-import requests
-
-# Загрузка аудио
-files = {'audio': open('meeting.mp3', 'rb')}
-response = requests.post('http://localhost:8000/api/process-audio', files=files)
-job_id = response.json()['job_id']
-
-# Проверка статуса
-status = requests.get(f'http://localhost:8000/api/status/{job_id}').json()
-print(status['progress'], status['status'])
-
-# Экспорт
-exports = {'job_id': job_id, 'exports': ['excel', 'word']}
-result = requests.post('http://localhost:8000/api/export', json=exports).json()
-print(result)
+**Рабочий процесс**:
+```
+📱 Голосовое → 🎧 SpeechKit → 📝 Текст → 🧠 YandexGPT → ✅ Google Docs (30-90 сек)
 ```
 
----
-
-## 🐛 Troubleshooting
-
-### Бот не отвечает
-- Проверь `TELEGRAM_TOKEN` в `.env`
-- Убедись что бот запущен: `python telegram-bot/bot_v2.py`
-- Проверь логи
-
-### Ошибка транскрибации
-- Проверь `OPENAI_API_KEY`
-- Убедись что формат аудио поддерживается (MP3, OGG, WAV)
-- Проверь размер файла (<20 МБ)
-
-### Jira не создаёт тикеты
-- Проверь `JIRA_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`
-- Убедись что проект `JIRA_PROJECT_KEY` существует
-- Проверь права доступа
-
-### Google Docs ошибка
-- Проверь `service-account.json`
-- Убедись что API включены
-- Проверь права на папку
-
----
-
-## 📚 Дополнительно
-
-- [Документация API](docs/API.md)
-- [Примеры промптов](docs/PROMPTS.md)
-- [FAQ](docs/FAQ.md)
-- [Contributing](CONTRIBUTING.md)
-
----
-
-## 💬 Поддержка
-
-- Telegram: @твой_канал
-- Email: support@voice2action.ai
-- Issues: https://github.com/yourusername/voice2action/issues
-
----
-
-**Voice2Action** © 2025 | Made with ❤️ and AI
+**Осталось**: `git push` → бот онлайн навсегда! 🚀 
+```
