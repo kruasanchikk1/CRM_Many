@@ -103,7 +103,7 @@ text
 
 | Сервис | Статус | Детали |
 |--------|--------|--------|
-| ✅ **Сайт** | 🟢 Живой | [voice2action.netlify.app](https://voice2action.netlify.app/) |
+| ✅ **Сайт** | 🟢 Живой | [voice2action.netlify.app](https://voice2action-site.netlify.app/) |
 | ✅ **Backend** | 🟢 Живой 24/7 | https://voice2action-api-vq9x.onrender.com/docs |
 | 🔄 **Telegram Bot** | 🟡 Последний шаг | requirements.txt → git push |
 
