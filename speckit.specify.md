@@ -1,5 +1,4 @@
 
-```markdown
 # Voice2Action - Technical Specification v2.0
 
 ## 1. System Overview
