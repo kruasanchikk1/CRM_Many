@@ -1,5 +1,3 @@
-
-```markdown
 # Voice2Action Constitution (v2.0)
 
 ## Core Principles
